@@ -37,6 +37,7 @@ Guide-level explanation
 =======================
 
 Max_Size can be applied to various entities in Ada:
+
  - Local and global variables
  - Components of records and arrays
  - Public views of private types
@@ -54,17 +55,16 @@ Max_Size on Array Types
 When used on types, Max_Size denotes the maximum size that any value of such type can have. For example:
 
 .. code-block:: ada
-
-	type T is array (Integer range <>) of Boolean with Max_Size => 8 * 64;
+   type T is array (Integer range <>) of Boolean with Max_Size => 8 * 64;
   
 Instances of the above types can be used as definite types. For example, one can write:
 
 .. code-block:: ada
 
-	   X : T;
-   begin
-	   X := (True, True);
-	   X := (True, True, False);
+      X : T;
+   begin   
+      X := (True, True);
+      X := (True, True, False);
      
 Notice that not only X can be declared without bounds, those bounds can change in the course of its lifetime without a check failure.
 The above requires a default value to be provided for this type (alongside of all types that can have a Max_Size aspect). In the case
@@ -72,9 +72,9 @@ of arrays, it would be an empty array, so that:
 
 .. code-block:: ada
 
-     X : T;
+      X : T;
    begin
-	    Pragma Assert (X’Length == 0);
+      Pragma Assert (X’Length == 0);
       
 Is true. Dynamic checks are inserted when needed to verify that the size of the value fits within type constraints.
 
@@ -109,8 +109,8 @@ write:
 
       X : I1’Class;
    begin
-	   X := R’(V => 10);
-	   X := C’(V => 10, W => 20);
+      X := R’(V => 10);
+      X := C’(V => 10, W => 20);
      
 As before, we need a special default initialization here. There’s not really such a thing for class-wide access type, we could create
 a special null tag value to identify those.
@@ -127,11 +127,10 @@ Max_Size can be defined on a private type, e.g.:
 
 As before, the above allows to write things such as:
 
-
 .. code-block:: ada
 
   V : T1;
-	W : T2;
+  W : T2;
 
 Note that having a max size automatically makes record with discriminants “mutable” - ie the value of the discriminant can change if
 they are assigned to a value.
@@ -159,8 +158,8 @@ Even if the type is indefinite, it’s possible to specify a Max_Size attribute 
 
       V : String with Max_Size => 8 * 10;
    begin
-	   V := “abc”;
-	   V := “defg”;
+      V := “abc”;
+      V := “defg”;
 
 Is perfectly appropriate. A dynamic check verifies that each assignment is done with a value of proper size. This would work with
 indefinite and class wide types as well, for example:
@@ -168,13 +167,14 @@ indefinite and class wide types as well, for example:
 
 .. code-block:: ada
 
-	  type I is interface;
-    type R is new I record
-	     V : Integer;
-	  end record;
-	  V : I’Class with Max_Size => 8 * 16;
-  begin
-  	  V := R’(V => 10);
+      type I is interface;
+      type R is new I record
+         V : Integer;
+      end record;
+
+      V : I’Class with Max_Size => 8 * 16;
+   begin
+      V := R’(V => 10);
       
 Note that in order for the above case to be statically checkable, the compiler need to have some way to dynamically know the size of a
 type, which may lead to additional code generation (e.g. size depending on the length of an array, tag of an object, discriminant of a 
@@ -185,9 +185,9 @@ Also note that Max_Size on object can further reduce the size of a type which al
 
 .. code-block:: ada
 
-	type T is array (Integer range <>) of Boolean with Max_Size => 8 * 64;
-	X : T with Max_Size => 8 * 16;
-	Y : T with Max_Size => 8 * 32;
+   type T is array (Integer range <>) of Boolean with Max_Size => 8 * 64;
+   X : T with Max_Size => 8 * 16;
+   Y : T with Max_Size => 8 * 32;
   
 If the value is larger, it will just be ignored (e.g. the smallest of the two is used).
 
@@ -200,9 +200,9 @@ Similarly to variables, it’s possible to use Max_Size clause on fields, so tha
 
    type T_I (<>) is private;
    type R is record
-	    V : String with Max_Size => 8 * 10;
-	    V2 : I’Class with Max_Size => 8 * 16;
-	    V3 : T_I with Max_Size => 8 * 16;
+       V : String with Max_Size => 8 * 10;
+       V2 : I’Class with Max_Size => 8 * 16;
+       V3 : T_I with Max_Size => 8 * 16;
    end record;
    
 The clear benefit is that it’s now possible to create data structures with indefinite fields avoiding usage of dynamic memory. This is 
@@ -214,10 +214,10 @@ so that the user can write something like:
 
 .. code-block:: ada
 
-  L : R;
+     L : R;
   begin
-	  L.V := “abc”;
-  	L.V := “abcd”;
+     L.V := “abc”;
+     L.V := “abcd”;
     
 Max_Size on Array Components
 ----------------------------
@@ -232,14 +232,16 @@ The Max_Size applies to the size of the array as a whole, not its individual com
 the components themselves. This can be done through the Max_Component_Size attribute, e.g.:
 
 .. code-block:: ada
+
    type T is array (Integer range <>) of String with Max_Component_Size => 8 * 10;
 
 In which case the compiler will reserve the right amount of memory for each component. The two clauses can be used together, for example:
 
 .. code-block:: ada
+
   type T is array (Integer range <>) of String with 
-	  Max_Component_Size => 8 * 10, 
-	  Max_Size => 8 * 80;
+     Max_Component_Size => 8 * 10, 
+     Max_Size => 8 * 80;
     
 Max_Size on Parameters and Returned Value
 -----------------------------------------
@@ -260,13 +262,13 @@ Similar to functions, it’s possible to specify maximum size in generic paramet
 .. code-block:: ada
 
   generic
-	  type T (<>) is private with Max_Size => 8 * 16;
-  	type R is tagged private with Max_Size => 8 * 16;
+     type T (<>) is private with Max_Size => 8 * 16;
+     type R is tagged private with Max_Size => 8 * 16;
   package P is
-	  type R is record
-	  	V1 : T;
-	  	V2 : R;
-	  end record;
+     type R is record  
+        V1 : T;
+	V2 : R;
+     end record;
   end P;
   
 The constraint is that the formal parameter must guarantee the max_size aspect, either because they have a max_size clause equal or
@@ -317,8 +319,8 @@ supported by Bounded_Indefinite_Holder. As a simple comparison, a program with t
 
    with Ada.Containers.Bounded_Indefinite_Holder;
    procedure Main is
-	   package String_Holder is new Ada.Containers.Bounded_Indefinite_Holder (String, 8 * 16);
-	   V1 V2 : String_Holder.Holder;
+      package String_Holder is new Ada.Containers.Bounded_Indefinite_Holder (String, 8 * 16);
+      V1 V2 : String_Holder.Holder;
    begin
       V1 := To_Holder (“abc”);
       V2 := To_Holder (“abcd”);
@@ -330,7 +332,7 @@ becomes:
 .. code-block:: ada
 
    procedure Main is
-	   V1 V2 : String with Max_Size => 8 * 16;
+      V1 V2 : String with Max_Size => 8 * 16;
    begin
       V1 := “abc”;
       V2 := “abcd”;
