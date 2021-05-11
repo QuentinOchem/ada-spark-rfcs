@@ -59,6 +59,8 @@ When assigning values to an aggregate, readonly values are ommited.
 When assigning objects as a whole, readonly fields are considered not read,
 writeonly fields are not written. E.g.:
 
+.. code-block:: ada
+
    X1 : R := (0, 0); -- correct, intializing B and Character
    X2 : R := X1; -- X2.B value is undefined, X1.A is not copied
 
