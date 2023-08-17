@@ -152,7 +152,7 @@ be used when using them in ghost code, e.g.:
    procedure Sort (A : in out Some_Array)
       with Post =>
          (Gold               => (if A'Length > 0 then A (A'First) <= A (A'Last)),
-          Gold and Platinium => (for all I in A'First .. A'Last -1 =>
+          Gold or Platinium => (for all I in A'First .. A'Last -1 =>
                                  A (I) <= A (I-1)>));
 ```
 
