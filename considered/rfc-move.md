@@ -180,7 +180,7 @@ begin
 ```
 
 'Move and 'Copy
--------------------------
+---------------
 
 An lvalue can be converted to a rvalue through the use of the 'Move attribute
 or to an rvalue through the use of the 'Copy attribute. For example:
@@ -229,6 +229,25 @@ begin
      -- warning - V may be use after move upon return
   end P2;
 ```
+
+However, moving an object to a limited variable afterwards makes usage valid
+again. For example:
+
+```Ada
+   V  : limited Holder := Create_Holder (1000);
+   V2 : limited Holder;
+begin
+   V2 := V;
+   -- Using V generates a compiler error here
+   V := Create_Holder (500);
+   -- Using V is ok now
+```
+
+Relationships with other types
+------------------------------
+
+TBD explore interaction with limited types
+TBD explore interactions with access and array types
 
 Reference-level explanation
 ===========================
