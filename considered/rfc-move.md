@@ -11,6 +11,9 @@ object also known as ``rvalue`` in languages such as C++. It can then be used
 to denote a reference to a so called rvalue, and implement move semantics
 similar to C++.
 
+This proposal also addresses natural extensions of limited types made possible
+by limited objects and parameters.
+
 Motivation
 ==========
 
@@ -243,11 +246,85 @@ begin
    -- Using V is ok now
 ```
 
-Relationships with other types
-------------------------------
+Relationships with limited types
+--------------------------------
 
-TBD explore interaction with limited types
-TBD explore interactions with access and array types
+Limited types in Ada are types that don't allow equality and copy. They have
+obvious connection with limited variables and parameters.
+
+In order to have a consistent model across the board for limited types and
+objects, this proposal suggest to lift the restriction that limited types
+can't be compared (which can be acheived by other means, such as using
+an abstract equality operator for regular types. A specific mean for classes
+can be considered outside of this proposal).
+
+The overall rule is that while a limited type can't be copied, it can be moved.
+As a consequence, the following are legal:
+
+```Ada
+   type Holder is limited class ...
+
+   V1 : Holder;
+   V2 : limited Holder;
+   V3 : limited Holder;
+begin
+   V2 := V1'Move; -- legal, move semantics
+   V3 := V2; -- legal, move semantics
+   V1 := V2'Copy; -- compilation error, can't copy a limited type
+```
+
+Relationships with access types
+-------------------------------
+
+Access types can now be declared limited. This means that their value can
+only be moved, never copied. E.g.:
+
+```Ada
+   type Holder is class ...
+   type A_Holder is limited access all Holder;
+
+   V1 : A_Holder := new Holder;
+   V2 : A_Holder;
+begin
+   V2 := V1; -- legal, move semantics
+   V1.all.Some_Primitive; -- illegal, value pointed by V1 has been moved
+```
+
+Unpon move of an access value, the previous pointer is reset to null. As a
+consequence, re-using it will lead to constraint error until it's assigned:
+
+```Ada
+   type Holder is class ...
+   type A_Holder is limited access all Holder;
+
+   V1 : A_Holder := new Holder;
+   V2 : A_Holder;
+begin
+   if Some_Condition then
+      V2 := V1; -- legal, move semantics
+   end if;
+
+   V1.all.Some_Primitive; -- warning, may raise constraint error
+```
+
+Access types may themselves only point to ``rvalues`` by marking their target
+types ``limited``. In that case, they are also implied ``all`` - ie general
+access types. Move semantics rules apply to their dereference view
+
+```Ada
+   type Holder is class ...
+   type A_Holder is access limited Holder;
+
+   V1 : A_Holder := new Holder;
+   V2 : limited Holder;
+   V3 : Holder;
+begin
+   V2 := V1.all; -- legal, move semantics of the pointed object
+   Free (V1);
+   V1 := new Holder;
+   V3 := V1.all'Copy; -- legal, copy semantics
+   V3 := v1.all; -- illegal
+```
 
 Reference-level explanation
 ===========================
