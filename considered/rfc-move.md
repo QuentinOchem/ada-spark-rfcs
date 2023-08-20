@@ -6,11 +6,11 @@
 Summary
 =======
 
-This proposal introduces a new notation ``limited``, denoting a limited
-reference to an object also known as ``rvalue`` in languages such as C++.
-It can then be used to denote a reference to a so called ``rvalue``, and
-implement move semantics similar to C++, as well as to some extent borrow
-semantics coming from Rust.
+This proposal introduces a new notation for``limited``, allowing it to be
+associated with variable or as a parameter mode. It receives values that should
+be moved instead of copied. This is a similar concept to the C++ rvalue
+reference. It also uses some safey aspects of the borrow checker coming from
+Rust.
 
 This proposal also addresses natural extensions of limited types made possible
 by limited objects and parameters.
@@ -35,9 +35,9 @@ Limited References
 We're introducing a new kind of object, a limited reference, associated with
 two ways of manipulating values:
 
-- A value can be moved from one reference to another one. In such case, it is
-  erroneous to use the previous reference to this object prior to another
-  assignment, as its value may be invalid.
+- A value can be moved (as opposed to copied) from one reference to another one.
+  In such case, it is erroneous to use the previous reference to this object
+  prior to another assignment, as its value may be invalid.
 - A value can be borrowed by a parameter. It can be modified by the body of
   the subprogram, but is expected to still be valid (ie not moved, or if moved,
   reassigned to a different value) when exiting the subprogram.
@@ -84,7 +84,7 @@ Limited references can only be assigned from:
 
 Limited references cannot be copied implicitely. They can't be assigned to
 non-limited variables or fields. They can be passed by reference to parameters
-in ``in`` mode.
+through borrow semantics:
 
 ```Ada
    procedure P1 (V : Integer);
@@ -95,29 +95,45 @@ in ``in`` mode.
 begin
 
    P1 (X); -- OK
-   P2 (X); -- Compilation Error
+   P2 (X); -- OK
 ```
 
-Limited parameter references, like other, can be modes ``in``, ``in out``,
-``access`` and ``aliased``. ``in`` limited parameters can accept either limited
-and non-limted references. Other modes require a limited object, and apply
-move semantics. For example:
+Limited parameter references is a parameter mode, at the same level as ``in``,
+``in out`` or ``access``. Limited parameter only accept limited references.
 
 ```Ada
-   procedure P1 (V : limited Integer);
-   procedure P2 (V : limited in out Integer);
+   procedure P (V : limited Integer);
 
    X1 : limited Integer;
    X2 : Integer;
 
 begin
 
-   P1 (X); -- OK
-   P1 (X2); -- OK
-
-   P2 (X); -- OK
-   P2 (X2); -- Compilation Error
+   P (X); -- OK
+   P (X2); -- Compilation Error
 ```
+
+Borrow Semantics
+----------------
+
+Borrow semantics are applied when a limited type is passed to a non-limited
+parameter. In this case, the source object is temporarily moved to the target,
+and back.
+
+```Ada
+   V : limited T;
+
+   procedure P1 (V in T);
+   procedure P2 (V in out T);
+
+begin
+
+   P1 (V); -- OK
+   P2 (V); -- OK
+```
+
+Note that while some language also provide borrow semantics when assigning
+to local variables, the current proposal does not explore that possibilty.
 
 Overloading and limited references
 ----------------------------------
@@ -310,42 +326,6 @@ begin
 end Create_Holder;
 ```
 
-Note that returned value of a function is always a ``rvalue``.
-Move semantics will be used both in the case of limited and non limited
-variables and parameters whenever the object that would be otherwise copied
-is an ``rvalue``. For example:
-
-```Ada
-   V1 : Holder (Create_Holder); -- Move constructor
-   V2 : Holder := Create_Holder; -- Move assignment
-   V3 : limited Holder := Create_Holder;
-   V4 : limited Holder;
-begin
-   V4 := V3; -- MOVE V3 into V4
-
-   V1 := V4; -- COPY V4 into V1
-```
-
-Borrow Semantics
-----------------
-
-Borrow semantics are applied when a limited type is passed to a non-limited
-parameter. In this case, the source object is temporarily moved to the target,
-and back. The only allowed borrowed mode is when passing an object into an
-``in`` parameter, which is the only safe one:
-
-```Ada
-   V : limited Holder;
-
-   procedure P1 (V in Holder);
-   procedure P2 (V in Holder);
-
-begin
-
-   P1 (V); -- OK, safe borrowing
-   P2 (V); -- Compilation Error
-```
-
 Summary of Copy, Move and Borrow Rules
 --------------------------------------
 
@@ -354,10 +334,10 @@ The following table describes the default behavior of assignment and association
 | A := B, A => B     | T        | limited T | constant T | (in T)   | (in out T) | (limited T) |
 | ------------------ | -------- | --------- | ---------- | -------- | ---------- | ----------- |
 | T                  | copy     | error     | copy       | copy     | copy       | error       |
-| limited T          | error    | move      | error      | error    | error      | error       |
+| limited T          | error    | move      | error      | error    | error      | move        |
 | constant T         | copy     | error     | copy       | copy     | copy       | error       |
-| (in T)             | copy/ref | borrow    | copy       | copy     | copy/ref   | error       |
-| (in out T)         | copy/ref | error     | error      | copy/ref | copy/ref   | borrow      |
+| (in T)             | copy/ref | borrow    | copy/ref   | copy/ref | copy/ref   | borrow      |
+| (in out T)         | copy/ref | borrow    | error      | copy/ref | copy/ref   | borrow      |
 | (limited T)        | error    | move      | error      | error    | error      | move        |
 
 'Move, 'Borrow and 'Copy
@@ -370,8 +350,6 @@ Three new attributes are introduced:
 - `'Move` can be applied to a limited reference or an object as long as they're
   variable (ie no constant, no in parameter) and triggers a move operation.
   The result can then ne moved to a limited reference or copied to an object.
-- `'Borrow` can be applied to a variable limited reference and used when
-  valuating a non-limited parameter.
 
 For example:
 
@@ -384,23 +362,6 @@ begin
    V3 := V1'Move; -- OK - this is a move from V1 to V3
    V1 := V3'Copy; -- OK - this is a copy from V3 to V1
 ```
-
-Note that these attributes can be use to override legal default behavior as well.
-For example:
-
-```Ada
-   V : limited Holder;
-
-   procedure P (X : in out limited Holder);
-begin
-   P (V);        -- borrow V in X
-   P (V'Borrow); -- same as above
-   P (V'Move);   -- forces a move of V, value is invalid at exit
-   P (V'Copy);   -- forces a copy of V
-```
-
-Note also that the usage of 'Move and/or 'Borrow can introduce erroneous
-behaviors.
 
 Erroneous Execution
 -------------------
