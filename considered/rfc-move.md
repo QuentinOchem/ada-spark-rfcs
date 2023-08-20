@@ -426,6 +426,18 @@ begin
    -- Using V is ok now
 ```
 
+Summary of assignments copy and move rules
+------------------------------------------
+
+| A := B, A => B     | T        | limited T | constant T | (T)      | (in out T) | (limited in T) | (limited in out T) |
+| T                  | copy     | error     | copy       | copy     | copy       | error          | error              |
+| limited T          | error    | move      | error      | error    | error      | error          | move               |
+| constant T         | copy     | error     | copy       | copy     | copy       | error          | error              |
+| (T)                | copy/ref | ref       | copy       | copy     | copy/ref   | error          | error              |
+| (in out T)         | copy/ref | error     | error      | copy/ref | copy/ref   | error          | error              |
+| (limited in T)     | error    | borrow    | error      | error    | error      | borrow         | borrow             |
+| (limited in out T) | error    | move      | error      | error    | error      | error          | move               |
+
 Reference-level explanation
 ===========================
 
@@ -454,7 +466,7 @@ from Rust:
 Drawbacks
 =========
 
-TBD
+See above.
 
 Prior art
 =========
@@ -487,7 +499,7 @@ likelyhood of an error would be usefult.
 Further coding style could also improve safety and consistency. For example:
 - pointers objets should be forced to be limited by default, as to avoid
   unecessary aliasing and increase memory safety.
-- limited types should always be referenced to by ``limited references``.
+- limited types should always be referenced to by limited references.
 - certain kind of warning on potential use after move should be turned
   to errrors, in particular when applied on parameter as their effect is non
   local.
