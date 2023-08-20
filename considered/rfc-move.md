@@ -430,6 +430,7 @@ Summary of assignments copy and move rules
 ------------------------------------------
 
 | A := B, A => B     | T        | limited T | constant T | (T)      | (in out T) | (limited in T) | (limited in out T) |
+| ------------------ | -------- | --------- | ---------- | -------- | ---------- | -------------- | ------------------ |
 | T                  | copy     | error     | copy       | copy     | copy       | error          | error              |
 | limited T          | error    | move      | error      | error    | error      | error          | move               |
 | constant T         | copy     | error     | copy       | copy     | copy       | error          | error              |
