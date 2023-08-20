@@ -6,7 +6,7 @@
 Summary
 =======
 
-This proposal introduces a new notation for``limited``, allowing it to be
+This proposal introduces a new notation for ``limited``, allowing it to be
 associated with variable or as a parameter mode. It receives values that should
 be moved instead of copied. This is a similar concept to the C++ rvalue
 reference. It also uses some safey aspects of the borrow checker coming from
@@ -60,7 +60,8 @@ Limited references can only be assigned from:
 - Other limited references, in which case values are moved from one reference
   to the next as opposed to copied (more on the differences between move and
   copy later).
-- A temporary value not referenced by any other object
+- A temporary value not referenced by any other object (some languages such as
+  C++ call these rvalues).
 
 ```Ada
    V1 : limited Integer := 1; -- OK
@@ -83,8 +84,9 @@ Limited references can only be assigned from:
 ```
 
 Limited references cannot be copied implicitely. They can't be assigned to
-non-limited variables or fields. They can be passed by reference to parameters
-through borrow semantics:
+non-limited variables or fields. They can be passed by reference to
+- limtied parameters, in which case they are moved
+- non limited parameters, in which case they are temporarily borrowed:
 
 ```Ada
    procedure P1 (V : Integer);
@@ -94,8 +96,8 @@ through borrow semantics:
 
 begin
 
-   P1 (X); -- OK
-   P2 (X); -- OK
+   P1 (X); -- Borrowed
+   P2 (X); -- Borrowed
 ```
 
 Limited parameter references is a parameter mode, at the same level as ``in``,
@@ -135,7 +137,7 @@ begin
 Note that while some language also provide borrow semantics when assigning
 to local variables, the current proposal does not explore that possibilty.
 
-Overloading and limited references
+Overloading and limited References
 ----------------------------------
 
 The ``limited`` modifier on a subprogram parameter can lead to overloading. In
@@ -157,7 +159,7 @@ that has the limited parameter. For example
    P2 (V1); -- Calls (3)
 ```
 
-This may lead to situation with multiple parameters where there are several
+This may lead to situations with multiple parameters where there are several
 options. This would lead to a compiler errror.
 
 ```Ada
@@ -193,7 +195,7 @@ an abstract equality operator for regular types. A specific mean for classes
 can be considered outside of this proposal).
 
 The overall rule is that while a limited type can't be copied, it can be moved.
-As a consequence, the following are legal:
+As a consequence, the following is legal:
 
 ```Ada
    type Holder is limited ...
@@ -224,7 +226,7 @@ object:
    V2 : limited A_Holder;
 begin
    V2 := V1; -- legal, move semantics. V1 is now null.
-   V1.all.Some_Primitive; -- Constraint Error
+   -- V1 is null here, the compiler will detect or warn possible usage
 ```
 
 The pointer type can itself be declared limited, which will have the added
@@ -238,7 +240,7 @@ constaint that it can't be copied.
    V2 : A_Holder;
 begin
    V2 := V1; -- legal, move semantics.  V1 is now null.
-   V1.all.Some_Primitive; -- Constraint Error
+   -- V1 is null here, the compiler will detect or warn possible usage
 ```
 
 Access types may themselves be marked as pointing to limtied references by
@@ -263,7 +265,7 @@ begin
 Move Semantics with Object Orientation
 --------------------------------------
 
-One of the most interesting use of limited references is the implemetnation
+One of the most interesting use of limited references is the implementation
 of move assignment and constructor in complex classes. This example assumes that
 the OOP revamp RFC is implemented and rely on the new constructors and
 assignment primitives.
@@ -276,13 +278,13 @@ Consider the following class:
       procedure Holder (Self : in out Holder; Source : T1);
       -- Regular by copy constructor
 
-      procedure Holder (Self : in out Holder; Source : limited in out T1);
+      procedure Holder (Self : in out Holder; Source : limited T1);
       -- Move constructor
 
       procedure ":=" (Self : in out T1; Source : T1);
       --  Regular assignment
 
-      procedure ":=" (Self : in out T1; Source : limited in out T1);
+      procedure ":=" (Self : in out T1; Source : limited T1);
       --  By copy assignment
 
       Size : Integer;
@@ -293,7 +295,7 @@ Consider the following class:
 
       ...
 
-      procedure Holder (Self : in out Holder; Source : limited in out T1) is
+      procedure Holder (Self : in out Holder; Source : limited T1) is
       begin
          Self.Size := Source.Size;
          Self.Contents := Source.Content;
@@ -302,7 +304,7 @@ Consider the following class:
          Source.Contents := null;
       end Holder;
 
-      procedure ":=" (Self : in out T1; Source : limited in out T1);
+      procedure ":=" (Self : in out T1; Source : limited T1);
       begin
          Free (Self.Contents);
 
@@ -316,34 +318,24 @@ Consider the following class:
   end Holder;
 ```
 
-Consider also that we have a function that returns a Holder:
-
-```Ada
-function Create_Holder return Holder is
-   Local_Object : Holder;
-begin
-   return Holder;
-end Create_Holder;
-```
-
 Summary of Copy, Move and Borrow Rules
 --------------------------------------
 
 The following table describes the default behavior of assignment and association:
 
-| A := B, A => B     | T        | limited T | constant T | (in T)   | (in out T) | (limited T) |
-| ------------------ | -------- | --------- | ---------- | -------- | ---------- | ----------- |
-| T                  | copy     | error     | copy       | copy     | copy       | error       |
-| limited T          | error    | move      | error      | error    | error      | move        |
-| constant T         | copy     | error     | copy       | copy     | copy       | error       |
-| (in T)             | copy/ref | borrow    | copy/ref   | copy/ref | copy/ref   | borrow      |
-| (in out T)         | copy/ref | borrow    | error      | copy/ref | copy/ref   | borrow      |
-| (limited T)        | error    | move      | error      | error    | error      | move        |
+| A := B, A => B  | B : T    | B : limited T | B : constant T | (B : in T) | (B : in out T) | (B : limited T) |
+| ----------------| -------- | ------------- | -------------- | ---------- | -------------- | --------------- |
+| A : T           | copy     | error         | copy           | copy       | copy           | error           |
+| A : limited T   | error    | move          | error          | error      | error          | move            |
+| A : constant T  | copy     | error         | copy           | copy       | copy           | error           |
+| (A : in T)      | copy/ref | borrow        | copy/ref       | copy/ref   | copy/ref       | borrow          |
+| (A : in out T)  | copy/ref | borrow        | error          | copy/ref   | copy/ref       | borrow          |
+| (A : limited T) | error    | move          | error          | error      | error          | move            |
 
 'Move and 'Copy
 ------------------------
 
-Three new attributes are introduced:
+Two new attributes are introduced:
 - `'Copy` can be applied to a limited reference or an object and triggers a
   copy operation. The result can be then moved to a limited reference or
   copied to an object.
@@ -354,6 +346,8 @@ Three new attributes are introduced:
 For example:
 
 ```Ada
+   function Create_Holder return Holder;
+
    V1 : Holder (Create_Holder); -- Move constructor
    V2 : Holder := Create_Holder; -- Move assignment
    V3 : limited Holder := Create_Holder;
