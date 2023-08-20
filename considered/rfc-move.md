@@ -329,20 +329,36 @@ begin
 Borrow Semantics
 ----------------
 
+Borrow semantics are applied when a limited type is passed to a non-limited
+parameter. In this case, the source object is temporarily moved to the target,
+and back. The only allowed borrowed mode is when passing an object into an
+``in`` parameter, which is the only safe one:
+
+```Ada
+   V : limited Holder;
+
+   procedure P1 (V in Holder);
+   procedure P2 (V in Holder);
+
+begin
+
+   P1 (V); -- OK, safe borrowing
+   P2 (V); -- Compilation Error
+```
+
 Summary of Copy, Move and Borrow Rules
 --------------------------------------
 
 The following table describes the default behavior of assignment and association:
 
-| A := B, A => B     | T        | limited T | constant T | (T)      | (in out T) | (limited in T) | (limited in out T) |
-| ------------------ | -------- | --------- | ---------- | -------- | ---------- | -------------- | ------------------ |
-| T                  | copy     | error     | copy       | copy     | copy       | error          | error              |
-| limited T          | error    | move      | error      | error    | error      | error          | move               |
-| constant T         | copy     | error     | copy       | copy     | copy       | error          | error              |
-| (T)                | copy/ref | ref       | copy       | copy     | copy/ref   | error          | error              |
-| (in out T)         | copy/ref | error     | error      | copy/ref | copy/ref   | error          | error              |
-| (limited in T)     | error    | borrow    | error      | error    | error      | borrow         | borrow             |
-| (limited in out T) | error    | move      | error      | error    | error      | error          | move               |
+| A := B, A => B     | T        | limited T | constant T | (in T)   | (in out T) | (limited T) |
+| ------------------ | -------- | --------- | ---------- | -------- | ---------- | ----------- |
+| T                  | copy     | error     | copy       | copy     | copy       | error       |
+| limited T          | error    | move      | error      | error    | error      | error       |
+| constant T         | copy     | error     | copy       | copy     | copy       | error       |
+| (in T)             | copy/ref | borrow    | copy       | copy     | copy/ref   | error       |
+| (in out T)         | copy/ref | error     | error      | copy/ref | copy/ref   | borrow      |
+| (limited T)        | error    | move      | error      | error    | error      | move        |
 
 'Move, 'Borrow and 'Copy
 ------------------------
@@ -354,27 +370,37 @@ Three new attributes are introduced:
 - `'Move` can be applied to a limited reference or an object as long as they're
   variable (ie no constant, no in parameter) and triggers a move operation.
   The result can then ne moved to a limited reference or copied to an object.
-- `'Borrow` can be applied to a limited reference or an object as long as they're
-  variable and used when valuating a limited or non-limited parameter.
+- `'Borrow` can be applied to a variable limited reference and used when
+  valuating a non-limited parameter.
 
-Here is an example o
+For example:
 
 ```Ada
    V1 : Holder (Create_Holder); -- Move constructor
    V2 : Holder := Create_Holder; -- Move assignment
    V3 : limited Holder := Create_Holder;
    V4 : limited Holder;
-
-   procedure P (V : in out Holder);
 begin
    V3 := V1'Move; -- OK - this is a move from V1 to V3
    V1 := V3'Copy; -- OK - this is a copy from V3 to V1
-
-   P (V3);        -- Compilation Error, can't do implicit move to a regular object
-   P (V3'Move);   -- OK - this is a move, V3 can't be used after
-   P (V3'Borrow); -- OK - this is a move back & forth, V3 can be used after
-   P (V3'Copy);   -- OK - this is a copy, V3 can be used after
 ```
+
+Note that these attributes can be use to override legal default behavior as well.
+For example:
+
+```Ada
+   V : limited Holder;
+
+   procedure P (X : in out limited Holder);
+begin
+   P (V);        -- borrow V in X
+   P (V'Borrow); -- same as above
+   P (V'Move);   -- forces a move of V, value is invalid at exit
+   P (V'Copy);   -- forces a copy of V
+```
+
+Note also that the usage of 'Move and/or 'Borrow can introduce erroneous
+behaviors.
 
 Erroneous Execution
 -------------------
