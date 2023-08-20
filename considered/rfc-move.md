@@ -340,7 +340,7 @@ The following table describes the default behavior of assignment and association
 | (in out T)         | copy/ref | borrow    | error      | copy/ref | copy/ref   | borrow      |
 | (limited T)        | error    | move      | error      | error    | error      | move        |
 
-'Move, 'Borrow and 'Copy
+'Move and 'Copy
 ------------------------
 
 Three new attributes are introduced:
@@ -431,7 +431,7 @@ from Rust:
 - Use of borrow and move operations is not always implicit. In particular,
   when crossing the boundaries of regular and limited references, the developer
   often has to precise his itent, and mark the right end part of the operation
-  with ``'Move``, ``'Borrow`` or ``'Copy``. While these could be inferred,
+  with ``'Move`` or ``'Copy``. While these could be inferred,
   it's impose to the developer as a way to explicit his intent in cases that
   are at the boundary of the model and which misunderstanding could lead
   to unanticipated behavior.
