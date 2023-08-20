@@ -73,12 +73,12 @@ Limited references can only be assigned from:
    V5 : limited Integer := V4; -- Compilation Error
 
    V6 : constant Integer := 0;
-   V7 : limited Integer := V6; -- OK
+   V7 : limited Integer := V6; -- Compilation Error
 
    procedure P (V : Integer) is
       L : limited Integer;
    begin
-      L := V; -- error
+      L := V; -- Compilation Error
    end P2;
 ```
 
@@ -95,7 +95,7 @@ in ``in`` mode.
 begin
 
    P1 (X); -- OK
-   P2 (X); -- compilation errror
+   P2 (X); -- Compilation Error
 ```
 
 Limited parameter references, like other, can be modes ``in``, ``in out``,
@@ -326,57 +326,55 @@ begin
    V1 := V4; -- COPY V4 into V1
 ```
 
+Borrow Semantics
+----------------
+
+Summary of Copy, Move and Borrow Rules
+--------------------------------------
+
+The following table describes the default behavior of assignment and association:
+
+| A := B, A => B     | T        | limited T | constant T | (T)      | (in out T) | (limited in T) | (limited in out T) |
+| ------------------ | -------- | --------- | ---------- | -------- | ---------- | -------------- | ------------------ |
+| T                  | copy     | error     | copy       | copy     | copy       | error          | error              |
+| limited T          | error    | move      | error      | error    | error      | error          | move               |
+| constant T         | copy     | error     | copy       | copy     | copy       | error          | error              |
+| (T)                | copy/ref | ref       | copy       | copy     | copy/ref   | error          | error              |
+| (in out T)         | copy/ref | error     | error      | copy/ref | copy/ref   | error          | error              |
+| (limited in T)     | error    | borrow    | error      | error    | error      | borrow         | borrow             |
+| (limited in out T) | error    | move      | error      | error    | error      | error          | move               |
+
 'Move, 'Borrow and 'Copy
 ------------------------
 
 Three new attributes are introduced:
-- `'Move`, to convert a value that can't move moved, typically a `lvalue`, into
-  a movable object.
-- `'Copy`, to force a copy on a limited reference
-- `'Borrow`, to allow borrowing of a limited reference from a parameter that
-  shouldn't normally allow it.
+- `'Copy` can be applied to a limited reference or an object and triggers a
+  copy operation. The result can be then moved to a limited reference or
+  copied to an object.
+- `'Move` can be applied to a limited reference or an object as long as they're
+  variable (ie no constant, no in parameter) and triggers a move operation.
+  The result can then ne moved to a limited reference or copied to an object.
+- `'Borrow` can be applied to a limited reference or an object as long as they're
+  variable and used when valuating a limited or non-limited parameter.
+
+Here is an example o
 
 ```Ada
    V1 : Holder (Create_Holder); -- Move constructor
    V2 : Holder := Create_Holder; -- Move assignment
    V3 : limited Holder := Create_Holder;
    V4 : limited Holder;
-begin
-   V3 := V1'Move; -- MOVE V1 into V3
-   V1 := V3'Copy; -- COPY V3 into V1
-```
 
-Note that Move requires a variable view of the object (a variable or an in out
-parameter for example) also known a ``lvalue`` while copy can work with any
-kind of view, in particular ``rvalue`` and ``constant``.
-
-Parameter passing allow for a additional kind of conversion, a borrow
-conversion that can be applied on an ``limited`` reference:
-
-```Ada
    procedure P (V : in out Holder);
-   V : limited Holder := Create_Holder (1000);
-
-   procedure P (V2 : in Holder);
 begin
-   P (V); -- illegal
-   P (V'Borrow); -- legal
+   V3 := V1'Move; -- OK - this is a move from V1 to V3
+   V1 := V3'Copy; -- OK - this is a copy from V3 to V1
 
-   P2 (V) -- legal
+   P (V3);        -- Compilation Error, can't do implicit move to a regular object
+   P (V3'Move);   -- OK - this is a move, V3 can't be used after
+   P (V3'Borrow); -- OK - this is a move back & forth, V3 can be used after
+   P (V3'Copy);   -- OK - this is a copy, V3 can be used after
 ```
-
-When applying ``'Borrow`` to a limited reference, the compiler is allowed to
-pass that object as a parameter. Note however that moving a variable parameter
-is always unsafe, so the following will raise a warning:
-
-procedure P (V : in out Holder) is
-   L : aliased Holder;
-begin
-   L := V'Move;
-   -- warning, possible use after move
-end;
-
-More on this in the next section.
 
 Erroneous Execution
 -------------------
@@ -425,19 +423,6 @@ begin
    V := Create_Holder (500);
    -- Using V is ok now
 ```
-
-Summary of assignments copy and move rules
-------------------------------------------
-
-| A := B, A => B     | T        | limited T | constant T | (T)      | (in out T) | (limited in T) | (limited in out T) |
-| ------------------ | -------- | --------- | ---------- | -------- | ---------- | -------------- | ------------------ |
-| T                  | copy     | error     | copy       | copy     | copy       | error          | error              |
-| limited T          | error    | move      | error      | error    | error      | error          | move               |
-| constant T         | copy     | error     | copy       | copy     | copy       | error          | error              |
-| (T)                | copy/ref | ref       | copy       | copy     | copy/ref   | error          | error              |
-| (in out T)         | copy/ref | error     | error      | copy/ref | copy/ref   | error          | error              |
-| (limited in T)     | error    | borrow    | error      | error    | error      | borrow         | borrow             |
-| (limited in out T) | error    | move      | error      | error    | error      | error          | move               |
 
 Reference-level explanation
 ===========================
