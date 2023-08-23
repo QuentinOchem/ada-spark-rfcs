@@ -6,25 +6,23 @@
 Summary
 =======
 
-This proposal introduces a new notation for ``limited``, allowing it to be
-associated with variable or as a parameter mode. It receives values that should
-be moved instead of copied. This is a similar concept to the C++ rvalue
-reference. It also uses some safey aspects of the borrow checker coming from
-Rust.
+This proposal introduces a new notation, ``limited``, allowing it to be
+associated with a variable or as a parameter mode. The notation designates
+values that should be moved rather than copied. It draws inspiration from the
+C++ rvalue reference and incorporates some safety aspects from Rust's borrow
+checker.
 
-This proposal also addresses natural extensions of limited types made possible
-by limited objects and parameters.
+The proposal also delves into the natural extensions of limited types brought
+forth by limited objects and parameters.
 
 Motivation
 ==========
 
-Ada is a language that has high performances and small footprint requirements
-for embedded situations. Move semantics as describe in C++ allows to avoid
-unecessary copies and remove certain cases of use of pointers while keeping
-memory safety.
-
-On top of this, forbiding or marking erroneous known unsafe pattern will improve
-the overall memory safety of standard Ada application.
+Ada excels in situations requiring high performance and a small footprint,
+particularly in embedded environments. C++'s move semantics eliminate
+unnecessary copies and reduce the reliance on pointers while maintaining
+memory safety. Enhancing Ada's memory safety by flagging or prohibiting known
+unsafe patterns will further solidify its standing.
 
 Guide-level explanation
 =======================
@@ -32,18 +30,17 @@ Guide-level explanation
 Limited References
 ------------------
 
-We're introducing a new kind of object, a limited reference, associated with
-two ways of manipulating values:
+We're introducing a new kind of object: the limited reference. It offers two
+distinct ways of handling values:
 
-- A value can be moved (as opposed to copied) from one reference to another one.
-  In such case, it is erroneous to use the previous reference to this object
-  prior to another assignment, as its value may be invalid.
-- A value can be borrowed by a parameter. It can be modified by the body of
-  the subprogram, but is expected to still be valid (ie not moved, or if moved,
-  reassigned to a different value) when exiting the subprogram.
+- A value can be moved (instead of copied) from one reference to another. After
+  the move, using the original reference before another assignment is erroneous,
+  since its value may be invalid.
+- A value can be borrowed by a parameter. It can be modified within the
+  subprogram, but is expected to remain valid (i.e., not moved or if moved,
+  assigned a new value) upon the subprogram's completion.
 
-A limited reference is denoted by the introduction of the word ``limited`` in
-front of the type, in a parameter, a variable or a field name. For example:
+A limited reference is denoted by the mode ``limited``. Here are some examples:
 
 ```Ada
    V : limited Some_Type;
@@ -55,7 +52,7 @@ front of the type, in a parameter, a variable or a field name. For example:
    procedure P (V : limited Some_Type);
 ```
 
-Limited references can only be assigned from:
+Assignments to limited references have constraints. They can only be assigned:
 
 - Other limited references, in which case values are moved from one reference
   to the next as opposed to copied (more on the differences between move and
@@ -83,10 +80,10 @@ Limited references can only be assigned from:
    end P2;
 ```
 
-Limited references cannot be copied implicitely. They can't be assigned to
-non-limited variables or fields. They can be passed by reference to
-- limtied parameters, in which case they are moved
-- non limited parameters, in which case they are temporarily borrowed:
+Limited references can't be copied implicitly. You can't assign them to
+non-limited variables or fields. When passed by reference to parameters,
+they can either be moved if the parameter is limited or temporarily borrowed
+otherwise:
 
 ```Ada
    procedure P1 (V : Integer);
@@ -100,8 +97,8 @@ begin
    P2 (X); -- Borrowed
 ```
 
-Limited parameter references is a parameter mode, at the same level as ``in``,
-``in out`` or ``access``. Limited parameter only accept limited references.
+A limited parameter is a distinct mode, comparable to ``in``, ``in out``, or
+``access``.  Such parameters only accept limited references.
 
 ```Ada
    procedure P (V : limited Integer);
@@ -118,9 +115,9 @@ begin
 Borrow Semantics
 ----------------
 
-Borrow semantics are applied when a limited type is passed to a non-limited
-parameter. In this case, the source object is temporarily moved to the target,
-and back.
+Borrow semantics apply when a limited type is passed to a non-limited
+parameter. Here, the source object is temporarily moved to the target and then
+move back.
 
 ```Ada
    V : limited T;
@@ -134,15 +131,15 @@ begin
    P2 (V); -- OK
 ```
 
-Note that while some language also provide borrow semantics when assigning
-to local variables, the current proposal does not explore that possibilty.
+While some languages also facilitate borrow semantics during local variable
+assignments, the current proposal doesn't explore this avenue.
 
 Overloading and limited References
 ----------------------------------
 
-The ``limited`` modifier on a subprogram parameter can lead to overloading. In
-that case, the compiler will always select in priority the available profile
-that has the limited parameter. For example
+The ``limited`` mode can induce overloading on a subprogram parameter. When
+this happens, the compiler invariably prioritizes the profile with the limited
+parameter. For example:
 
 ```Ada
    V1 : Integer := 1;
@@ -185,17 +182,22 @@ However, many cases can be resolved when always giving the priority to limited:
 Limited Types
 -------------
 
-Limited types in Ada are types that don't allow equality and copy. They have
-obvious connection with limited variables and parameters.
+Limited types in Ada traditionally prevent objects from being copied or compared
+for equality. This aligns with Ada's emphasis on safety, especially when c
+ertain objects represent unique resources.
 
-In order to have a consistent model across the board for limited types and
-objects, this proposal suggest to lift the restriction that limited types
-can't be compared (which can be acheived by other means, such as using
-an abstract equality operator for regular types. A specific mean for classes
-can be considered outside of this proposal).
+In line with evolving programming paradigms and efficient resource management,
+we propose introducing move semantics for limited types, allowing the transfer
+of ownership between variables.
 
-The overall rule is that while a limited type can't be copied, it can be moved.
-As a consequence, the following is legal:
+For consistency, this proposal suggests allowing equality checks for limited
+types. Instead of default mechanisms, developers can use abstract equality
+operators or other tailored means.
+
+While copying remains restricted for limited types, moving should be permitted.
+This allows the transfer of an object's state without duplicating the resource.
+
+Consider:
 
 ```Ada
    type Holder is limited ...
@@ -208,15 +210,19 @@ begin
    V2 := V1; -- Compilation error
 ```
 
+Here, V2 inherits from V3 without duplication. But assigning from V1 to V2 is
+illegal due to the copy restriction on limited types.
+
 Limited Access References and Types
 -----------------------------------
 
-Access types can now be declared limited. This means that their value can
-only be moved, never copied. One of the consequence of moving a limited pointer
-object is that its value is reset to null.
+The idea of limited access types introduces further value to move semantics.
+The primary distinction here is between a regular access type,
+which allows both copying and moving, and a limited access type,
+which allows only moving.
 
-This first exemple shows usage of a limited reference on a regular pointer
-object:
+This first example demonstrates the usage of a limited reference for a
+regular pointer object:
 
 ```Ada
    type Holder is  ...
@@ -229,8 +235,8 @@ begin
    -- V1 is null here, the compiler will detect or warn possible usage
 ```
 
-The pointer type can itself be declared limited, which will have the added
-constaint that it can't be copied.
+The pointer type itself can be declared as limited, which not only prevents
+copying but also enforces move semantics on all instances:
 
 ```Ada
    type Holder is  ...
@@ -243,10 +249,8 @@ begin
    -- V1 is null here, the compiler will detect or warn possible usage
 ```
 
-Access types may themselves be marked as pointing to limtied references by
-marking their target types ``limited``. In that case, they are also implied
-``all`` - ie general access types. Move semantics rules apply to their
-dereference view:
+Access types can also target limited objects, thereby adding another layer of
+restriction.
 
 ```Ada
    type Holder is  ...
@@ -265,10 +269,10 @@ begin
 Move Semantics with Object Orientation
 --------------------------------------
 
-One of the most interesting use of limited references is the implementation
-of move assignment and constructor in complex classes. This example assumes that
-the OOP revamp RFC is implemented and rely on the new constructors and
-assignment primitives.
+Move semantics can significantly improve object-oriented design. When combined
+with new constructors and assignment primitives from the OOP revamp proposal,
+limited references can provide an efficient way to manage objects without
+unnecessary copying
 
 Copy and assignment primitives can now be provided with limited parameters.
 Consider the following class:
@@ -318,10 +322,28 @@ Consider the following class:
   end Holder;
 ```
 
+We can now write the following without copy:
+
+```Ada
+
+   function Create_Holder (Size : Integer := 0) is
+   begin
+      return Holder (Size);
+   end Create_Holder;
+
+   V : limited Holder;
+
+begin
+
+   V := Create_Holder (5); -- no need for any copy here
+
+```
+
 Summary of Copy, Move and Borrow Rules
 --------------------------------------
 
-The following table describes the default behavior of assignment and association:
+The table provided offers an exhaustive list of potential interactions and
+their results:
 
 | A := B, A => B  | B : T    | B : limited T | B : constant T | (B : in T) | (B : in out T) | (B : limited T) |
 | ----------------| -------- | ------------- | -------------- | ---------- | -------------- | --------------- |
@@ -335,7 +357,11 @@ The following table describes the default behavior of assignment and association
 'Move and 'Copy
 ------------------------
 
-Two new attributes are introduced:
+Two new attributes are introduced, offer explicit control over the operations,
+making it easier for developers to understand and command the flow of data and
+to override sitations that would otherwise lead to compilation error as
+described above:
+
 - `'Copy` can be applied to a limited reference or an object and triggers a
   copy operation. The result can be then moved to a limited reference or
   copied to an object.
@@ -413,22 +439,42 @@ See above.
 Rationale and alternatives
 ==========================
 
-There are a few dimentioning decisions made in that proposal that differ notably
-from Rust:
+There are a few dimensioning decisions made in that proposal that
+differ notably from Rust and C++:
 
-- The use of move / borrow semantics is a choice made by the developer. It's
-  an additional constrained imposed on object references. Specific coding
-  standard may impose further restrictions, however it's not the default mode.
-  This is a trade-off different from Rust. There's no strong argument here in
-  whether one is better than the other, however given Ada legacy, it feels
-  more natural to keep semantic of current programs unchanged.
-- Use of borrow and move operations is not always implicit. In particular,
-  when crossing the boundaries of regular and limited references, the developer
-  often has to precise his itent, and mark the right end part of the operation
-  with ``'Move`` or ``'Copy``. While these could be inferred,
-  it's impose to the developer as a way to explicit his intent in cases that
-  are at the boundary of the model and which misunderstanding could lead
-  to unanticipated behavior.
+- Limited References: The decision to introduce a new kind of reference
+  (limited) similar to Rust's &mut and C++ &&. We're introducing a reserved word
+  here, instead of a symbol Ada's syntax aims to be explicit and readable,
+  even at the cost of being more verbose. This contrasts with other languages
+  design decisions that favor conciseness. By having a limited keyword, we hope
+  to provide Ada developers a clear and distinct signal of the difference
+  between standard Ada references and the new references that introduce move semantics.
+
+- Borrow Semantics: While Rust incorporates borrowing semantics both at the
+  variable and parameter levels, our proposal chooses to limit borrowing
+  semantics primarily at the parameter level. This decision could be reverted
+  in an extension of this proposal if deemed useful.
+
+- Overloading with limited: The idea to use overloading with the limited
+  parameter can be seen as introducing another layer of complexity.
+  However, C++ has demonstrated its usefulness, in particular in the context
+  of copy constructors and assignment overload.
+
+- Limited Types and Limited Access References: The way Ada deals with
+  limited types is inherently different from Rust. While Rust defines every
+  type as potentially being moved, Ada's traditional types don't have this
+  property. Introducing move semantics in a way that remains compatible with
+  existing Ada codebases and idioms is crucial, and similiar to C++ choices.
+  By allowing for the definition of limited access types and references, we
+  provide a structured way for Ada developers to opt into move semantics without
+  breaking or complicating their existing code.
+
+- Use After Move: The Ada philosophy centers around safety. As such, ensuring
+  that moved objects cannot be accessed is essential for preventing unforeseen
+  bugs or undefined behavior. The way our proposal deals with "use after move"
+  scenarios, by making them compilation errors or warnings, is in line with
+  Ada's goal of catching potential problems at compile-time rather than runtime.
+  SPARK could further extent this analysis and discharge unecessary warnings.
 
 Drawbacks
 =========
@@ -438,35 +484,34 @@ See above.
 Prior art
 =========
 
-This is heavily influenced by C++ move semantics and to a lesser extent Rust
-move mechanism.
+This is influenced by C++ move and to a lesser extent Rust borrow checking
+mechanism, see above for more details.
 
 Unresolved questions
 ====================
 
-There is a potential overal between that feature and a full fetched
-borrow-checker as provided by languages such as SPARK and Rust. The extent of
-that overlap and the extent to which this feature could be used in that context
-is unclear.
+There's a discernible overlap between this feature and a full-fledged
+borrow-checker seen in languages like SPARK and Rust. The scope of this
+overlap and its applicability within that context remain uncertain.
 
-Another unresolved question is the potential interaction with tasking.
+The interaction of this feature with tasking also presents an unresolved query.
 
 Future possibilities
 ====================
 
-This proposal identifies new erroneous behaviors. Note that these are not new
-per se, they are inherent to the underlying programming patterns that can
-be developped with less safe methods, for example through the use of pointers
-or through the use of ad-hoc move operations without the tracking offer by
-the limtied notation. At present, these behaviors are identified through either
-errors when they are certain, or warnings when they can occur only in certain
-cases. Having a tools such as SPARK further clearing or confirming the
-likelyhood of an error would be usefult.
+While this proposal pinpoints new erroneous behaviors, they aren't gemuinly new
+vulnerabilities. They stem from existing programming patterns developed through
+less secure methods, such as pointer usage or ad-hoc move operations without
+the safeguards provided by the limited notation. Currently, these behaviors
+manifest as errors or warnings, depending on the certainty of occurrence.
+Leveraging tools like SPARK to further elucidate or validate error
+probabilities would be advantageous.
 
-Further coding style could also improve safety and consistency. For example:
-- pointers objets should be forced to be limited by default, as to avoid
-  unecessary aliasing and increase memory safety.
-- limited types should always be referenced to by limited references.
-- certain kind of warning on potential use after move should be turned
-  to errrors, in particular when applied on parameter as their effect is non
-  local.
+Additionally, adopting certain coding practices can bolster safety and
+consistency:
+
+- By default, pointer objects should be limited to mitigate unnecessary
+  aliasing and enhance memory safety.
+- Limited types should consistently be accessed via limited references.
+- Some warnings, especially those related to "use after move" in parameters
+  (due to their non-local impact), should escalate to errors.
