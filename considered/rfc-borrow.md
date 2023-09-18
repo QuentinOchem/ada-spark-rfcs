@@ -14,15 +14,100 @@ Motivation
 Guide-level explanation
 =======================
 
+Safe Accesses
+--------------
+
+This RFC introduces the concept of safe access (somehwat similar to smart
+pointer) which is an access type with additional capabilities such as automatic
+memory reclaimation or reference counting. A smart access is declared on a
+pointer type with the `Safe_Access` aspect applied on it:
+
+```Ada
+   type Cell is record
+      X : Integer;
+   end record;
+
+   type A is access all Cell with Safe_Access;
+```
+
+By default, a Safe_Access points to a constant object. The following is illegal:
+
+```Ada
+   V : A := new Cell (X => 42);
+
+   V.X := 0; --  compilation error
+```
+
+By default, aliasing safe accesses is illegal. You can't do the following:
+
+```Ada
+   V1 : A := new Cell (X => 42);
+   V2 : A := V1; --  compilation error
+```
+
+You can however move the value from one pointer through the next with the 'Move
+attribute:
+
+```Ada
+   V1 : A := new Cell (X => 42);
+   V2 : A := V1'Move; --  V1 is null after that statement
+```
+
+You can also swap two values:
+
+```Ada
+   V1 : A := new Cell (X => 42);
+   V2 : A := new Cell (X => 43);
+begin
+   V1'Swap (V2);
+```
+
+By default, smart access can't point to the stack. The following is illegal:
+
+```Ada
+   L : aliased Cell;
+   V : A := L'Access; --  compilation error
+```
+
+Aliasing values, modification of the pointed value as well as accessing the
+stack can be done through additional capabilities described in this proposal.
+
+Memory pointed by smart accesses can be manually reclaimed:
+
+```Ada
+   declare
+      V : A := new Cell (X => 42);
+
+      procedure Free is new Unchecked_Deallocation (Cell, A);
+   begin
+      Free (V);
+   end;
+```
+
+It will be automatically reclaimed upon finalization of the pointer as well, or
+if assigned a different value:
+
+```Ada
+   declare
+      V : A := new Cell'(X => 42);
+
+      procedure Free is new Unchecked_Deallocation (Cell, A);
+   begin
+      V := new Cell'(X => 43); -- Free first allocated value
+   end; -- Free the second allocated value
+```
+
 Limited pointers
 ----------------
 
-On the previous RFC, we introduced the concept of limited pointers. One of
+On a different RFC, we introduced the concept of limited pointers. One of
 the specificities of these pointers is to implement move semantics upon
-assignment:
+assignment. While assignment of regular safe pointers is forbidden,
+assignment of limited pointer is allowed as it does not create an alias:
+
 
 ```Ada
-      type A is limited access Cell;
+      type A is limited access Cell with Safe_Access;
 
       V1 : A := new Cell;
       V2 : A;
@@ -33,31 +118,24 @@ assignment:
       --  V1 is not accessible anymore and reset to null
 ```
 
-This proposal introduces three new operations:
-- The ability to enable re-counted pointers, and create read-only memory aliases
-- The ability to create a temporary write reference to an object
-- The ability to create a non ref-counted "weak" reference to an object
-
 Refcounted pointers
 -------------------
 
-Move semantics are always the defaul mode for an assignment. However, a limited
-access type can be extended with the capability of doing refcounting:
+A safe access can be configured to allow various kinds of aliases. Allowing
+aliases on safe pointers enables refconting. This can be enabled by adding
+a parameter to the Safe_Access aspect:
 
 ```
-   type A is limited access Cell
-      with Smart_Access => (Alias);
+   type A is access all Cell with Safe_Access => (Alias);
 ```
 
 Adding this capabilty to a pointer allows for a new kind of assignment, 'Alias,
-which aliases the pointer. Note that aliases must be readonly. In order to call
-'Alias, the object needs to be marked as readonly:
+which aliases the pointer.
 
 ```Ada
       V1 : A := new Cell; -- the target object is created, refcount 1
       V2 : A;
    begin
-      V1'Readonly; - bah, need something else......
       V2 := V1'Alias;
       --  V1 and V2 point to the same object
       --  The target object is now refcount 2
@@ -73,13 +151,13 @@ In some situations, it's necessary to create a "weak" reference, that is a
 reference to an object that is not ref-counting. This is fundamentally a safety
 risk, as there's no way to ensure that the memory will not be accessed after
 all the other object are dereferenced. It's however possible, as long as the
-pointer type is declared with the right attributes, possibly together with
-refcounting capabilities:
+pointer type is declared with the right attributes:
 
 ```
-   type A is limited access Cell
-      with Smart_Access => (Weak_Alias);
+   type A is access all Cell with Safe_Access => (Weak_Alias);
 ```
+
+Note that Weak_Alias implies Alias.
 
 Adding this capabilty to a pointer allows for a new kind of assignment,
 'Weak_Alias:
@@ -88,7 +166,6 @@ Adding this capabilty to a pointer allows for a new kind of assignment,
       V1 : A := new Cell; -- the target object is created, refcount 1
       V2 : A;
    begin
-      V1'Readonly;
       V2 := V1'Weak_Alias;
       --  V1 and V2 point to the same object
       --  The target object is still refcount 1
@@ -97,7 +174,10 @@ Adding this capabilty to a pointer allows for a new kind of assignment,
       -- There's no protection against V2 usage at this stage
 ```
 
-Borrowed write access
+Other restrictions for safe accesses are still enabled on V2 - in particular
+V2 is readonly in this example.
+
+Write-enabled aliases
 ---------------------
 
 By default, aliased pointers can only be read. It is however possible to
@@ -109,9 +189,11 @@ the borrowed view.
 Ability to borrow an object must be specified at the pointer type declaration:
 
 ```
-   type A is limited access Cell
-      with Smart_Access => (Write_Alias);
+   type A is access all Cell
+      with Safe_Access => (Write_Alias);
 ```
+
+Note that Write_Alias implies Alias.
 
 The cleanest way to access to a borrowed read-write reference is to create a
 pointer specifically for this objective:
@@ -121,7 +203,6 @@ pointer specifically for this objective:
       V1 : A := new Cell; -- the target object is created, refcount 1
       V2 : A;
    begin
-      V1'Readonly;
       V2 := V1'Write_Alias;
 
       -- At this point V2 can be written
@@ -136,7 +217,6 @@ Another pattern may be to only turn Write_Alias directly on the statement:
       V1 : A := new Cell; -- the target object is created, refcount 1
       V2 : A;
    begin
-      V1'Readonly;
       V2 := V1'Alias;
 
       V2'Write_Alias.X := 0;
@@ -151,13 +231,12 @@ or write. For example, this will raise an exception:
 
       procedure Proc (P1, P2 : A) is
       begin
-         P1.X := 0; -- This will raise an exception from the call below, the pointed object is considered constant
+         P1.X := 0; -- This will raise an exception from the call below
          P2.X := 0;
       end Proc;
 
    begin
       Proc (V1, V2'Write_Alias);
-      -- There's a dynamic check on P1.X
 ```
 
 Write alias is released when freeing the pointer. That can happen when manually
@@ -166,75 +245,197 @@ invoking `Free`, or upon automatic memory reclaim, as shown later.
 Note that it's possible to specify and test that pointers can be writable:
 
 ```Ada
-
    procedure Proc (P1, P2 : A)
-   with Pre => P1'Write_Alias or P2'Write_Alias
+   with Pre => P1'Is_Write_Alias or P2'Is_Write_Alias
 
    procedure Proc (P1, P2 : A) is
    begin
-      if P1'Write_Alias then
+      if P1'Is_Write_Alias then
          P1.X := 0;
       else
          P2.X := 0;
       end if;
    end Proc;
-
 ```
-
-
-Automatic reclaim of memory
----------------------------
-
-Smart accesses are automatically reclaiming memory. Note that to enable this
-capability, you only need to mark a limited pointer as being smart:
-
-```
-   type A is limited access Cell with Smart_Access;
-```
-
-Pointers will automatically reclaim the memory with their associated data when
-they are themselve finalized. For example:
-
-```Ada
-   declare
-      V1 : A := new Cell;
-   begin
-      V1.X := 0;
-   end; -- V1 is freed at this stage
-```
-
-It is legal to explitely free a pointer, in which case the reclaimation is
-manually performed.
-
-Refcounted pointers are dereferenced automatically upon finalization, the data
-they point to will be freed once their refcount equals 0:
-
-```Ada
-   declare
-      V1 : A := new Cell;
-   begin
-      V1.X := 0;
-      declare
-         V2 : A := V1'Alias;
-      begin
-         null;
-      end; -- V2 is only refcounting -1, the object still exist
-   end; -- V1 is freed at this stage
-```
-
-Weak reference do not lead to either decrement of refcounting nor deallocation.
 
 Accessing the stack with limited accesses
 -----------------------------------------
 
-Data representation considerations
+By construction, the memory in stack or global data is managed automatically
+by the application. As a consequence, it is not possible to have a regular
+alias to it. The only available aliasing method is weak alias.
+
+Setting the value of an object through the 'Access or 'Unchecked_Access
+attributes is equivalent to creating a weak alias to it:
+
+```Ada
+   type A is access all Cell with Safe_Pointer (Weak_Alias);
+
+   C : aliased Cell;
+   V : A := C'Access; -- legal, V is a weak alias to the C value.
+```
+
+Data representation and perfomance considerations
+-------------------------------------------------
+
+A natural implementation of safe pointers is to add additional fields to the
+pointer types:
+
+- The accessed data needs to be possibly associated with a reference count
+- The accessed data needs to be possibly associated with a flag following if it
+  has an active write reference.
+- The access needs to have a flag to know if it's a weak access
+
+An optimised implementation would only create the above data when necessary
+(that is, for access types allowing the above operations).
+
+In addition to the above, it's important to note additional checks needed
+upon access to the data when write references are allowed. Each time an access
+is performed, a boolean check need to be performed to know if the operation is
+allowed.
+
+More on non-writable accessed data
 ----------------------------------
+
+Note that a safe pointer is only controlling the fact that it pointed object
+is writable or not. The pointed object may have additional fields that are
+themselves pointers and handled separately. As a consequence, the following
+is legal:
+
+```Ada
+   type C1 is record
+      X : Integer;
+   end record;
+
+   type A1 is access all C1;
+
+   type C2 is record
+      C : C1;
+   end record;
+
+   type A2 is access all C2 with Safe_Access;
+
+   V : A2 := new C2'(C => new C1);
+begin
+   V.C.X := 0;
+```
+
+Safe accesses and returned values
+---------------------------------
+
+Returning safe access values follow similar rules as for limited types. In
+particular, it is not possible to return directly a safe access as it may
+generate a copy:
+
+```Ada
+   G : A := new Cell;
+
+   function Get_G return A is
+   begin
+      return G; -- compilation error
+   end Get_G;
+```
+
+It is possible however to create an aliased view, use the move attribute or
+create an in-place initialization:
+
+```Ada
+   G : A := new Cell;
+
+   function Get_G return A is
+   begin
+      return G'Alias; -- OK
+   end Get_G;
+
+   function Move_G return A is
+   begin
+      return G'Move; -- OK
+   end Move_G;
+
+   function New_G return A is
+   begin
+      return new Cell; -- OK
+   end New_G;
+```
+
+Boolean attributes
+------------------
+
+The following boolean attributes are available for safe pointer in order to
+allow quering their state:
+
+- V'Is_Weak_Alias - return true if V is a weak reference
+- V'Is_Write_Alias - return true if V can be written
+- V'Aliases - return the current value of the reference counter
+
+Thread-Safe pointers
+--------------------
+
+By default, safe pointers are thread-safe. This means that they can be accessed
+from multiple thread, and that reference counting as well as flag setting
+operations are atomic. An optimized implementation would implement these
+operations through so called lock-free instructions.
+
+An optional configuration can be offered to optimize safe accesses in cases
+where they're either single threaded, or where the developper wants to take
+the responsbilty of ensuring absence of race conditions:
+
+```
+   type A is access all Cell with Safe_Access (Thread_Safe => False);
+```
 
 Conversion from unsafe pointers
 -------------------------------
 
+Converting a regular access type to a safe access is a fundamental unsafe
+operation. It is forbidden:
+
+```
+   type A1 is access all Cell;
+   type A2 is access all Cell with Safe_Access;
+
+   V1 : A1 := new Cell;
+   V2 : A2 := A2 (V1); -- illegal
+```
+
+A workaround to the above is to consider the accessed data to be a weak access
+and use 'Access as if it were data on the stack:
+
+```
+   type A1 is access all Cell;
+   type A2 is access all Cell with Safe_Access (Weak_Access);
+
+   V1 : A1 := new Cell;
+   V2 : A2 := V1.all'Access;
+```
+
+The guarantees provided there are then the same ones as for weak accesses.
+
 Generalization to non-access types
 ----------------------------------
+
+The concept of safe accesses can be extended to any types. Indeed, it is
+sometimes convenient to create one "virtual" access, for example through
+an integer handle:
+
+```
+   type Handle is Integer with Safe_Access;
+```
+
+In these cases, the compiler will add necessary data to implement semantics.
+For example:
+
+```
+   type Handle is Integer with Safe_Access (Alias);
+
+   V1 : Handle := Get_Handle;
+
+   V2 := V1'Alias; -- refcount
+```
+
+If the type has a destructor associated with it (assuming OOP RFC) or is a
+controlled type (assuming controlled types are not obsolete), then finalization
+will be called when refcount reaches 0.
 
 Reference-level explanation
 ===========================
