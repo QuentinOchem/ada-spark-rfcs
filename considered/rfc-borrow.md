@@ -38,6 +38,17 @@ By default, a Safe_Access points to a constant object. The following is illegal:
    V.X := 0; --  compilation error
 ```
 
+One direct consequence is that (by default) you can't pass a safe access
+directly to a subprogram:
+
+```Ada
+   V : A := new Cell (X => 42);
+
+   procedure P (Param : A);
+
+   P (V); -- compilation error
+```
+
 By default, aliasing safe accesses is illegal. You can't do the following:
 
 ```Ada
@@ -51,6 +62,10 @@ attribute:
 ```Ada
    V1 : A := new Cell (X => 42);
    V2 : A := V1'Move; --  V1 is null after that statement
+
+   procedure P (Param : A);
+
+   P (V'Move);
 ```
 
 You can also swap two values:
@@ -95,6 +110,67 @@ if assigned a different value:
    begin
       V := new Cell'(X => 43); -- Free first allocated value
    end; -- Free the second allocated value
+```
+
+Borrowing
+---------
+
+Borrowing is a way to create a temporary move of a pointer to a specific
+object. Borrowing is always scoped, it starts on the initial introduction of
+the 'Borrow up until the end of the scope. Is is equivalent to doing a 'Move
+in one direction, then on the other at the end of said scope. For example:
+
+
+```Ada
+   type A is access all Cell with Safe_Pointer;
+
+   V1 : A := new Cell;
+begin
+
+   declare
+      V2 : A;
+   begin
+      V2 := V1'Borrow; -- at this stage, V1 is null, borrowed by V2.
+   end; -- at this stage, V2 get back the borrowed value V1
+```
+
+Note that this synax works for dynamic object too - at compilation time, a
+straighforward implementation is to generate a temporary for the borrowed
+pointer in order to be able to restore it, so that:
+
+```Ada
+declare
+   V2 : A;
+begin
+   V2 := X.Y.Z'Borrow;
+   X := new Some_Structure;
+end; -- still release the value of the previous pointer
+```
+
+is equivalent to:
+
+```Ada
+declare
+   V2 : A;
+begin
+   tmp = X.Y.Z'Access;
+   V2 := X.Y.Z'Borrow;
+   X := new Some_Structure;
+end; -- still release the value of the previous pointer stored in tmp
+```
+
+Borrowing is the canonical way to pass pointers to subprogram where smart
+pointers do not allow aliases:
+
+```Ada
+   V : A;
+
+   procedure P (Param : A);
+
+begin
+
+   P (V'Borrow);
+   --  V is accessible again here
 ```
 
 Limited pointers
@@ -144,8 +220,18 @@ which aliases the pointer.
       Free (V2); -- refcount is now 0, data is freed
 ```
 
-Weak references
----------------
+An alias can be used in a subprogram call:
+
+```Ada
+   V : A := new Cell (X => 42);
+
+   procedure P (Param : A);
+
+   P (V'Alias); -- compilation error
+```
+
+Unchecked Aliases
+-----------------
 
 In some situations, it's necessary to create a "weak" reference, that is a
 reference to an object that is not ref-counting. This is fundamentally a safety
@@ -154,19 +240,19 @@ all the other object are dereferenced. It's however possible, as long as the
 pointer type is declared with the right attributes:
 
 ```
-   type A is access all Cell with Safe_Access => (Weak_Alias);
+   type A is access all Cell with Safe_Access => (Unchecked_Alias);
 ```
 
-Note that Weak_Alias implies Alias.
+Note that Unchecked_Alias implies Alias.
 
 Adding this capabilty to a pointer allows for a new kind of assignment,
-'Weak_Alias:
+'Unchecked_Alias:
 
 ```Ada
       V1 : A := new Cell; -- the target object is created, refcount 1
       V2 : A;
    begin
-      V2 := V1'Weak_Alias;
+      V2 := V1'Unchecked_Alias;
       --  V1 and V2 point to the same object
       --  The target object is still refcount 1
 
@@ -181,8 +267,8 @@ Write-enabled aliases
 ---------------------
 
 By default, aliased pointers can only be read. It is however possible to
-temporarily borrow a writable view of an object pointed by a pointer.
-When borrowed, the pointed object can only be accessed from that view. It's
+temporarily alias a writable view of an object pointed by a pointer.
+When alised, the pointed object can only be accessed from that view. It's
 possible to create other references but none can be accessed before releasing
 the borrowed view.
 
@@ -236,26 +322,82 @@ or write. For example, this will raise an exception:
       end Proc;
 
    begin
-      Proc (V1, V2'Write_Alias);
+      Proc (V1'Alias, V2'Write_Alias);
 ```
 
 Write alias is released when freeing the pointer. That can happen when manually
 invoking `Free`, or upon automatic memory reclaim, as shown later.
 
-Note that it's possible to specify and test that pointers can be writable:
+Write-Enabled Borrowing
+-----------------------
+
+Similar to a Write_Alias, tt's possible to create a "Write_Borrow" view that
+allows for modifications:
 
 ```Ada
-   procedure Proc (P1, P2 : A)
-   with Pre => P1'Is_Write_Alias or P2'Is_Write_Alias
+   type A is access all Cell with Safe_Pointer;
 
-   procedure Proc (P1, P2 : A) is
+   V1 : A := new Cell;
+begin
+
+   declare
+      V2 : A;
    begin
-      if P1'Is_Write_Alias then
-         P1.X := 0;
-      else
-         P2.X := 0;
-      end if;
-   end Proc;
+      V2 := V1'Write_Borrow;
+      V2.X := 5;
+   end;
+```
+
+If the pointer type also allows for aliases, the same restrictions as for the
+Write_Alias will be applied. However, Write_Borrow is available for all safe
+pointers, and is automatically released like regular borrow.
+
+Writable Views
+--------------
+
+A smart access can be refered to through its "writable" view, through the
+'Writable aspect associated with the type, e.g.:
+
+```Ada
+   type A is access all Cell with Safe_Pointer (Write_Alias);
+
+   V1 : A'Writable := new Cell;
+begin
+
+   V1.X := 0; -- legal, V1 is writable
+```
+
+Objects of this kind need to be assigned a writable view, either a borrowed
+or an aliased one. Moving a writable value is also permitted. E.g.:
+
+```Ada
+   V1 : A := new Cell;
+   V2 : A'Writable := V1'Write_Borrow; -- legal
+
+   V3 : A := new Cell;
+   V4 : A'Writable := V1'Write_Alias; -- legal
+
+   V5 : A := new Cell;
+   V6 : A'Writable := V1'Alias; -- compilation error
+
+   V7 : A := new Cell;
+   V8 : A'Writable := V1'Move; -- run-time error
+
+   V9 : A := new Cell;
+   V10 : A := V9'Write_Alias;
+   V11 : A'Writable := V1'Move; -- OK
+```
+
+'Writable can also be used in subprogram parameters to express the fact that
+the target object needs to always be writable:
+
+```Ada
+   V1 : A := new Cell;
+
+   procedure P (V : A'Writable);
+begin
+   P (V1'Borrow); -- run-time error
+   P (V1'Writable_Borrow) -- legal
 ```
 
 Accessing the stack with limited accesses
@@ -269,30 +411,11 @@ Setting the value of an object through the 'Access or 'Unchecked_Access
 attributes is equivalent to creating a weak alias to it:
 
 ```Ada
-   type A is access all Cell with Safe_Pointer (Weak_Alias);
+   type A is access all Cell with Safe_Pointer (Unchecked_Alias);
 
    C : aliased Cell;
    V : A := C'Access; -- legal, V is a weak alias to the C value.
 ```
-
-Data representation and perfomance considerations
--------------------------------------------------
-
-A natural implementation of safe pointers is to add additional fields to the
-pointer types:
-
-- The accessed data needs to be possibly associated with a reference count
-- The accessed data needs to be possibly associated with a flag following if it
-  has an active write reference.
-- The access needs to have a flag to know if it's a weak access
-
-An optimised implementation would only create the above data when necessary
-(that is, for access types allowing the above operations).
-
-In addition to the above, it's important to note additional checks needed
-upon access to the data when write references are allowed. Each time an access
-is performed, a boolean check need to be performed to know if the operation is
-allowed.
 
 More on non-writable accessed data
 ----------------------------------
@@ -364,9 +487,27 @@ Boolean attributes
 The following boolean attributes are available for safe pointer in order to
 allow quering their state:
 
-- V'Is_Weak_Alias - return true if V is a weak reference
-- V'Is_Write_Alias - return true if V can be written
+- V'Is_Unchecked_Alias - return true if V is an unchecked reference
+- V'Is_Writable - return true if V can be written
+- V'Is_Readable - return true if the value can be read (ie there's no write reference elsewhere)
 - V'Aliases - return the current value of the reference counter
+
+This allows to write contracts and checks on the status of pointers that go
+beyong what could be done with the structural 'Writable attribute:
+
+```Ada
+   procedure Proc (P1, P2 : A)
+   with Pre => P1'Is_Writable or P2'Is_Writable
+
+   procedure Proc (P1, P2 : A) is
+   begin
+      if P1'Is_Writable then
+         P1.X := 0;
+      else
+         P2.X := 0;
+      end if;
+   end Proc;
+```
 
 Thread-Safe pointers
 --------------------
@@ -403,7 +544,7 @@ and use 'Access as if it were data on the stack:
 
 ```
    type A1 is access all Cell;
-   type A2 is access all Cell with Safe_Access (Weak_Access);
+   type A2 is access all Cell with Safe_Access (Unchecked_Alias);
 
    V1 : A1 := new Cell;
    V2 : A2 := V1.all'Access;
@@ -437,6 +578,26 @@ If the type has a destructor associated with it (assuming OOP RFC) or is a
 controlled type (assuming controlled types are not obsolete), then finalization
 will be called when refcount reaches 0.
 
+
+Data representation and perfomance considerations
+-------------------------------------------------
+
+A natural implementation of safe pointers is to add additional fields to the
+pointer types:
+
+- The accessed data needs to be possibly associated with a reference count
+- The accessed data needs to be possibly associated with a flag following if it
+  has an active write reference.
+- The access needs to have a flag to know if it's a weak access
+
+An optimised implementation would only create the above data when necessary
+(that is, for access types allowing the above operations).
+
+In addition to the above, it's important to note additional checks needed
+upon access to the data when write references are allowed. Each time an access
+is performed, a boolean check need to be performed to know if the operation is
+allowed.
+
 Reference-level explanation
 ===========================
 
@@ -444,6 +605,9 @@ See above.
 
 Rationale and alternatives
 ==========================
+
+This proposal uses an aspect-based syntax. The same semantic could be kept with
+a trait-based syntax, should traits be included in a further version of Ada.
 
 Drawbacks
 =========
