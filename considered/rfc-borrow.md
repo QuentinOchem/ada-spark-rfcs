@@ -30,12 +30,13 @@ pointer type with the `Safe_Access` aspect applied on it:
    type A is access all Cell with Safe_Access;
 ```
 
-By default, a Safe_Access points to a constant object. The following is illegal:
+By default, the value pointed by a safe access is not modifiable.
+The following is illegal:
 
 ```Ada
    V : A := new Cell (X => 42);
 
-   V.X := 0; --  compilation error
+   V.X := 0; --  run-time error
 ```
 
 One direct consequence is that (by default) you can't pass a safe access
@@ -54,27 +55,6 @@ By default, aliasing safe accesses is illegal. You can't do the following:
 ```Ada
    V1 : A := new Cell (X => 42);
    V2 : A := V1; --  compilation error
-```
-
-You can however move the value from one pointer through the next with the 'Move
-attribute:
-
-```Ada
-   V1 : A := new Cell (X => 42);
-   V2 : A := V1'Move; --  V1 is null after that statement
-
-   procedure P (Param : A);
-
-   P (V'Move);
-```
-
-You can also swap two values:
-
-```Ada
-   V1 : A := new Cell (X => 42);
-   V2 : A := new Cell (X => 43);
-begin
-   V1'Swap (V2);
 ```
 
 By default, smart access can't point to the stack. The following is illegal:
@@ -112,6 +92,35 @@ if assigned a different value:
    end; -- Free the second allocated value
 ```
 
+Move
+----
+
+A new attribute, 'Move, is provided to smart accesses. Once moved, the
+value of the access is not reachable by the previous variable - to ensure
+this behavior at run-time, it is reset to null. For example:
+
+You can however move the value from one pointer through the next with the 'Move
+attribute:
+
+```Ada
+   V1 : A := new Cell (X => 42);
+   V2 : A := V1'Move; --  V1 is null after that statement
+
+   procedure P (Param : A);
+
+   P (V'Move);
+```
+
+An additional attribute is provided to swap to values (moving one value to the
+next respectively):
+
+```Ada
+   V1 : A := new Cell (X => 42);
+   V2 : A := new Cell (X => 43);
+begin
+   V1'Swap (V2);
+```
+
 Borrowing
 ---------
 
@@ -134,7 +143,7 @@ begin
    end; -- at this stage, V2 get back the borrowed value V1
 ```
 
-Note that this synax works for dynamic object too - at compilation time, a
+Note that this synax works for dynamic objects too - at compilation time, a
 straighforward implementation is to generate a temporary for the borrowed
 pointer in order to be able to restore it, so that:
 
@@ -153,9 +162,11 @@ is equivalent to:
 declare
    V2 : A;
 begin
-   tmp = X.Y.Z'Access;
+   -- tmp = X.Y.Z'Access;
    V2 := X.Y.Z'Borrow;
+   -- X.Y.Z = null
    X := new Some_Structure;
+   -- tmp.all = V2
 end; -- still release the value of the previous pointer stored in tmp
 ```
 
@@ -173,35 +184,32 @@ begin
    --  V is accessible again here
 ```
 
-Limited pointers
-----------------
-
-On a different RFC, we introduced the concept of limited pointers. One of
-the specificities of these pointers is to implement move semantics upon
-assignment. While assignment of regular safe pointers is forbidden,
-assignment of limited pointer is allowed as it does not create an alias:
-
+One of the consequences of the above is that it's not possible to escape a
+borrowed value. Consider the following:
 
 ```Ada
-      type A is limited access Cell with Safe_Access;
+   G : A;
 
-      V1 : A := new Cell;
-      V2 : A;
+   procedure P (V : A) is
    begin
-      V2 := V1;
-      --  equivalent to V2 := V1'Move;
-      --  V1 has been moved to V2
-      --  V1 is not accessible anymore and reset to null
+      G := V'Borrow;
+   end P;
 ```
 
-Refcounted pointers
+In the above example, borrowed value is returned at the end of the procedure
+and G will be reset to null.
+
+The above should be source of analysis for potential mistake by the compiler,
+static analysis or formal proof tools.
+
+Aliased Safe Access
 -------------------
 
-A safe access can be configured to allow various kinds of aliases. Allowing
-aliases on safe pointers enables refconting. This can be enabled by adding
+A safe access can be configured to allow  aliases. Allowing
+aliases on safe pointers enables refconting. This can be specified by adding
 a parameter to the Safe_Access aspect:
 
-```
+```Ada
    type A is access all Cell with Safe_Access => (Alias);
 ```
 
@@ -237,9 +245,9 @@ In some situations, it's necessary to create a "weak" reference, that is a
 reference to an object that is not ref-counting. This is fundamentally a safety
 risk, as there's no way to ensure that the memory will not be accessed after
 all the other object are dereferenced. It's however possible, as long as the
-pointer type is declared with the right attributes:
+pointer type allows such operation:
 
-```
+```Ada
    type A is access all Cell with Safe_Access => (Unchecked_Alias);
 ```
 
@@ -263,76 +271,15 @@ Adding this capabilty to a pointer allows for a new kind of assignment,
 Other restrictions for safe accesses are still enabled on V2 - in particular
 V2 is readonly in this example.
 
-Write-enabled aliases
----------------------
-
-By default, aliased pointers can only be read. It is however possible to
-temporarily alias a writable view of an object pointed by a pointer.
-When alised, the pointed object can only be accessed from that view. It's
-possible to create other references but none can be accessed before releasing
-the borrowed view.
-
-Ability to borrow an object must be specified at the pointer type declaration:
-
-```
-   type A is access all Cell
-      with Safe_Access => (Write_Alias);
-```
-
-Note that Write_Alias implies Alias.
-
-The cleanest way to access to a borrowed read-write reference is to create a
-pointer specifically for this objective:
-
-
-```Ada
-      V1 : A := new Cell; -- the target object is created, refcount 1
-      V2 : A;
-   begin
-      V2 := V1'Write_Alias;
-
-      -- At this point V2 can be written
-      V2.X := 0;
-
-      Free (V2); -- Write alias is reclaimed here, data can be red by others
-```
-
-Another pattern may be to only turn Write_Alias directly on the statement:
-
-```Ada
-      V1 : A := new Cell; -- the target object is created, refcount 1
-      V2 : A;
-   begin
-      V2 := V1'Alias;
-
-      V2'Write_Alias.X := 0;
-```
-
-When there is an active write alias, other references can't be access for read
-or write. For example, this will raise an exception:
-
-```Ada
-      V1 : A := new Cell; -- the target object is created, refcount 1
-      V2 : A;
-
-      procedure Proc (P1, P2 : A) is
-      begin
-         P1.X := 0; -- This will raise an exception from the call below
-         P2.X := 0;
-      end Proc;
-
-   begin
-      Proc (V1'Alias, V2'Write_Alias);
-```
-
-Write alias is released when freeing the pointer. That can happen when manually
-invoking `Free`, or upon automatic memory reclaim, as shown later.
-
 Write-Enabled Borrowing
 -----------------------
 
-Similar to a Write_Alias, tt's possible to create a "Write_Borrow" view that
-allows for modifications:
+By default, safe pointers can only be read. It is however possible to
+temporarily borrow a mutable view of the accessed object. Note that as long as
+a mutable view is borrowed, no other object can acquire another mutable view
+nor read the object.
+
+Borrowing a mutable view is done through the 'Write_Borrow aspect:
 
 ```Ada
    type A is access all Cell with Safe_Pointer;
@@ -344,13 +291,38 @@ begin
       V2 : A;
    begin
       V2 := V1'Write_Borrow;
-      V2.X := 5;
-   end;
+      V2.X := 5; -- legal
+   end; -- borrow to V1 is released
 ```
 
-If the pointer type also allows for aliases, the same restrictions as for the
-Write_Alias will be applied. However, Write_Borrow is available for all safe
-pointers, and is automatically released like regular borrow.
+Note that it's prefectly reasonable to have a shorcut version of the above if
+only one statement is needed:
+
+```Ada
+   type A is access all Cell with Safe_Pointer;
+
+   V1 : A := new Cell;
+begin
+   V1'Write_Borrow.X := 5
+```
+
+In that case, the borrow is released right after the assignment.
+
+```Ada
+   type A is access all Cell with Safe_Pointer (Alias);
+
+   V1 : A := new Cell;
+   V2 : A := V1'Alias;
+begin
+
+   declare
+      V3 : A;
+   begin
+      V3 := V1'Write_Borrow;
+      V3.X := 5; -- legal
+      Put_Line (V2.all'Img); -- runtime error
+   end;
+```
 
 Writable Views
 --------------
@@ -359,7 +331,7 @@ A smart access can be refered to through its "writable" view, through the
 'Writable aspect associated with the type, e.g.:
 
 ```Ada
-   type A is access all Cell with Safe_Pointer (Write_Alias);
+   type A is access all Cell with Safe_Pointer (Alias);
 
    V1 : A'Writable := new Cell;
 begin
@@ -375,17 +347,14 @@ or an aliased one. Moving a writable value is also permitted. E.g.:
    V2 : A'Writable := V1'Write_Borrow; -- legal
 
    V3 : A := new Cell;
-   V4 : A'Writable := V1'Write_Alias; -- legal
-
-   V5 : A := new Cell;
-   V6 : A'Writable := V1'Alias; -- compilation error
+   V4 : A'Writable := V3'Alias; -- compilation error
 
    V7 : A := new Cell;
-   V8 : A'Writable := V1'Move; -- run-time error
+   V8 : A'Writable := V7'Move; -- run-time error
 
    V9 : A := new Cell;
    V10 : A := V9'Write_Alias;
-   V11 : A'Writable := V1'Move; -- OK
+   V11 : A'Writable := V10'Move; -- OK
 ```
 
 'Writable can also be used in subprogram parameters to express the fact that
@@ -400,8 +369,22 @@ begin
    P (V1'Writable_Borrow) -- legal
 ```
 
-Accessing the stack with limited accesses
------------------------------------------
+An object can also be assigned to a writable view. It can be further borrowed,
+but can never be aliased (as aliasing would create a readable view which can
+never be read):
+
+```Ada
+   V1 : A'Writable := new Cell;
+
+   procedure P (V : A);
+
+   P (V1'Borrow); -- legal
+   P (V1'Write_Borrow); -- also legal BUT WHY ARE WE ALLOWING THIS HERE??? WRITABILITY IS NOT ASKED
+   P (V1'Alias); -- compilation error
+```
+
+Accessing the Stack with Safe Pointers
+--------------------------------------
 
 By construction, the memory in stack or global data is managed automatically
 by the application. As a consequence, it is not possible to have a regular
