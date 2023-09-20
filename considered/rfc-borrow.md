@@ -126,8 +126,10 @@ Borrowing
 
 Borrowing is a way to create a temporary move of a pointer to a specific
 object. Borrowing is always scoped, it starts on the initial introduction of
-the 'Borrow up until the end of the scope. Is is equivalent to doing a 'Move
-in one direction, then on the other at the end of said scope. For example:
+the 'Borrow up until the end of the scope of the object receiving the borrow
+(which could be a variable, a parameter or a temporary value). Is is equivalent
+to doing a 'Move in one direction, then on the other at the end of said scope.
+For example:
 
 
 ```Ada
@@ -238,6 +240,9 @@ An alias can be used in a subprogram call:
    P (V'Alias); -- compilation error
 ```
 
+Note that the reference counter is automatically decreased upong finalization
+of the safe access - which can lead to a deallocation of the object.
+
 Unchecked Aliases
 -----------------
 
@@ -324,8 +329,8 @@ begin
    end;
 ```
 
-Writable Views
---------------
+Writable and Unritable Views
+----------------------------
 
 A smart access can be refered to through its "writable" view, through the
 'Writable aspect associated with the type, e.g.:
@@ -337,6 +342,18 @@ A smart access can be refered to through its "writable" view, through the
 begin
 
    V1.X := 0; -- legal, V1 is writable
+```
+
+Similarly, a smart access can be refered to as an "readonly" view through
+the 'Readonly aspect. A view that is explicitely readonly cannot be modified
+to a read-write view. For example:
+
+```Ada
+   type A is access all Cell with Safe_Pointer (Alias);
+
+   V1 : A'Readonly := new Cell;
+begin
+   V1'Write_Borrow.X := 0; -- illegal, V1 cannot boe read.
 ```
 
 Objects of this kind need to be assigned a writable view, either a borrowed
@@ -353,7 +370,7 @@ or an aliased one. Moving a writable value is also permitted. E.g.:
    V8 : A'Writable := V7'Move; -- run-time error
 
    V9 : A := new Cell;
-   V10 : A := V9'Write_Alias;
+   V10 : A := V9'Write_Borrow;
    V11 : A'Writable := V10'Move; -- OK
 ```
 
@@ -379,8 +396,49 @@ never be read):
    procedure P (V : A);
 
    P (V1'Borrow); -- legal
-   P (V1'Write_Borrow); -- also legal BUT WHY ARE WE ALLOWING THIS HERE??? WRITABILITY IS NOT ASKED
+   P (V1'Write_Borrow); -- legal
    P (V1'Alias); -- compilation error
+```
+
+Dereferencing
+-------------
+
+Dereferencing always implies a borrow operation. For example:
+
+```Ada
+   procedure P (X : Cell);
+   V : A;
+begin
+   P (V.all);
+   V.X := 0;
+```
+
+is equivalent to:
+
+```Ada
+   procedure P (X : Cell);
+   V : A;
+begin
+   P (V'Borrow.all);
+   V'Borrow.X := 0;
+```
+
+Usage of dereferenced smart pointers needs to be consistent with their state.
+In particular:
+
+- Smart pointers that are in a state which forbids reading their content cannot
+  be dereferenced.
+- Smart pointer that are in a state which forbids modifying their content cannot
+  have a referenced value used
+
+Dereferencing for a read-write view of a access needs to be done from a writable
+view, for example:
+
+```Ada
+   procedure P (X : in out Cell);
+   V1 : A := new Cell;
+begin
+   P (V'Write_Borrow.all);
 ```
 
 Accessing the Stack with Safe Pointers
@@ -535,6 +593,26 @@ and use 'Access as if it were data on the stack:
 
 The guarantees provided there are then the same ones as for weak accesses.
 
+
+Data representation and perfomance considerations
+-------------------------------------------------
+
+A natural implementation of safe pointers is to add additional fields to the
+pointer types:
+
+- The accessed data needs to be possibly associated with a reference count
+- The accessed data needs to be possibly associated with a flag following if it
+  has an active write reference.
+- The access needs to have a flag to know if it's a weak access
+
+An optimised implementation would only create the above data when necessary
+(that is, for access types allowing the above operations).
+
+In addition to the above, it's important to note additional checks needed
+upon access to the data when write references are allowed. Each time an access
+is performed, a boolean check need to be performed to know if the operation is
+allowed.
+
 Generalization to non-access types
 ----------------------------------
 
@@ -560,26 +638,6 @@ For example:
 If the type has a destructor associated with it (assuming OOP RFC) or is a
 controlled type (assuming controlled types are not obsolete), then finalization
 will be called when refcount reaches 0.
-
-
-Data representation and perfomance considerations
--------------------------------------------------
-
-A natural implementation of safe pointers is to add additional fields to the
-pointer types:
-
-- The accessed data needs to be possibly associated with a reference count
-- The accessed data needs to be possibly associated with a flag following if it
-  has an active write reference.
-- The access needs to have a flag to know if it's a weak access
-
-An optimised implementation would only create the above data when necessary
-(that is, for access types allowing the above operations).
-
-In addition to the above, it's important to note additional checks needed
-upon access to the data when write references are allowed. Each time an access
-is performed, a boolean check need to be performed to know if the operation is
-allowed.
 
 Reference-level explanation
 ===========================
