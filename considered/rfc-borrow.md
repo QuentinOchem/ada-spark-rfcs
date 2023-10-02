@@ -186,6 +186,8 @@ begin
    --  V is accessible again here
 ```
 
+NOTA THE FOLLOWING STATEMENT IS FALSE!!!!!
+
 One of the consequences of the above is that it's not possible to escape a
 borrowed value. Consider the following:
 
