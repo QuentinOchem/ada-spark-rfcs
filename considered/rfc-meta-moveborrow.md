@@ -228,7 +228,26 @@ value indeed).
 'Sync_Swap is an atomic operation. It is thread safe.
 
 'Sync_Borrow creates a lock on the object itself so that no other thread
-can either move, swap or borrow the value synchronously.
+can either move, swap or borrow the value synchronously. The above can be
+rewritten:
+
+```Ada
+   X : Handle;
+
+   task T1 is
+      Y : Handle;
+   begin
+      Y := X'Sync_Borrow;
+      -- Y is valid until the end of the scope, then returned
+   end T1;
+
+   task T2 is
+      Y : Handle;
+   begin
+      Y := X'Sync_Borrow;
+      -- Y is valid until the end of the scope, then returned
+   end T2;
+```
 
 Reference-level explanation
 ===========================
