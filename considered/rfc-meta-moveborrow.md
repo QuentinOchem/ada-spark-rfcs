@@ -139,7 +139,7 @@ begin
    --  V is accessible again here
 ```
 
-Note that this synax works for dynamic objects too - at compilation time, a
+Note that this syntax works for dynamic objects too - at compilation time, a
 straighforward implementation is to generate a temporary for the borrowed
 pointer in order to be able to restore it, so that:
 
@@ -200,8 +200,8 @@ possible to introduce this thread safety with 'Sync_Move, 'Sync_Borrow and
 'Sync_Swap respectively. In these cases, the move operations (or back & forth
 move operations) are done atomically.
 
-This does not guarantee however that asynchronous operations are free of
-erroneous behaviors. Notably:
+White thread-safe, Sync_Move does not guarantee that asynchronous operations are
+free of erroneous behaviors. Notably:
 
 ```Ada
    X : Handle;
@@ -220,10 +220,15 @@ erroneous behaviors. Notably:
 ```
 
 In the above code, one of the task does the proper move operation. For the
-other, accessing X is erroneous.
+other, accessing X is erroneous. Depending on the run-time behavior, this
+can be however bounded. For example, if X is a pointer, its value is null and
+dynamic checking on the value of Y can be made (ie - did I manage to move the
+value indeed).
 
-TODO: see how rust works that out!!!
+'Sync_Swap is an atomic operation. It is thread safe.
 
+'Sync_Borrow creates a lock on the object itself so that no other thread
+can either move, swap or borrow the value synchronously.
 
 Reference-level explanation
 ===========================
