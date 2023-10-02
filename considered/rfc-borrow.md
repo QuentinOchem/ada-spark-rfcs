@@ -17,10 +17,12 @@ Guide-level explanation
 Two needs have emerged somewhat simulaneously to improve the language:
 
 - The capacity to identify an object as containing a unique value. This is
-  similar to what's called a rvalue reference in C++.
+  similar to what's called a rvalue reference in C++. See
+  `Limited objects <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited-objects.md>`_
 - The capacity to control the number of aliases and allowed read / write
   operations for objects pointed by dynamic memory. This is similar to Rust
-  borrow semantics.
+  borrow semantics. See
+  `Safe access <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-safe-access.md>`_
 
 These two concept introduce commonly new notions to the Ada programming
 language, notably the concept of moving and borrowing an object.
@@ -297,7 +299,7 @@ For example the following is illegal:
 ```Ada
    procedure P (V : access Integer) with Thread_Safe is
    begin
-      V.all := 10;
+      V.all := 10; -- Error, dereference is not thread safe
    end P;
 ```
 
