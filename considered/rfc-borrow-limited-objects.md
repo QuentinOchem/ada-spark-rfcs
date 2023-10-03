@@ -30,15 +30,11 @@ Guide-level explanation
 Limited References
 ------------------
 
-We're introducing a new kind of object: the limited reference. It offers two
-distinct ways of handling values:
-
-- A value can be moved (instead of copied) from one reference to another. After
-  the move, using the original reference before another assignment is erroneous,
-  since its value may be invalid.
-- A value can be borrowed by a parameter. It can be modified within the
-  subprogram, but is expected to remain valid (i.e., not moved or if moved,
-  assigned a new value) upon the subprogram's completion.
+We're introducing a new kind of object: the limited reference. Two specific
+data manipulations have a modified sematic:
+- The assignment instruction is making a move from the right end to the
+  left end.
+- A parameter passing is making a borrow  ov the value.
 
 A limited reference is denoted by the mode ``limited``. Here are some examples:
 
@@ -52,13 +48,14 @@ A limited reference is denoted by the mode ``limited``. Here are some examples:
    procedure P (V : limited Some_Type);
 ```
 
-Assignments to limited references have constraints. They can only be assigned:
+Move to limited references have constraints. They can only be assigned:
 
 - Other limited references, in which case values are moved from one reference
   to the next as opposed to copied (more on the differences between move and
   copy later).
 - A temporary value not referenced by any other object (some languages such as
   C++ call these rvalues).
+- An explicit move
 
 ```Ada
    V1 : limited Integer := 1; -- OK
@@ -80,10 +77,7 @@ Assignments to limited references have constraints. They can only be assigned:
    end P2;
 ```
 
-Limited references can't be copied implicitly. You can't assign them to
-non-limited variables or fields. When passed by reference to parameters,
-they can either be moved if the parameter is limited or temporarily borrowed
-otherwise:
+When passed by reference to parameters, values are borrowed:
 
 ```Ada
    procedure P1 (V : Integer);
@@ -111,28 +105,6 @@ begin
    P (X); -- OK
    P (X2); -- Compilation Error
 ```
-
-Borrow Semantics
-----------------
-
-Borrow semantics apply when a limited type is passed to a non-limited
-parameter. Here, the source object is temporarily moved to the target and then
-move back.
-
-```Ada
-   V : limited T;
-
-   procedure P1 (V in T);
-   procedure P2 (V in out T);
-
-begin
-
-   P1 (V); -- OK
-   P2 (V); -- OK
-```
-
-While some languages also facilitate borrow semantics during local variable
-assignments, the current proposal doesn't explore this avenue.
 
 Overloading and limited References
 ----------------------------------
@@ -215,6 +187,9 @@ illegal due to the copy restriction on limited types.
 
 Limited Access References and Types
 -----------------------------------
+
+TODO: Review this with safe access in mind - a limited access is essentially
+a safe pointer here!
 
 The idea of limited access types introduces further value to move semantics.
 The primary distinction here is between a regular access type,
@@ -354,20 +329,14 @@ their results:
 | (A : in out T)  | copy/ref | borrow        | error          | copy/ref   | copy/ref       | borrow          |
 | (A : limited T) | error    | move          | error          | error      | error          | move            |
 
-'Move and 'Copy
-------------------------
+'Copy
+-----
 
-Two new attributes are introduced, offer explicit control over the operations,
-making it easier for developers to understand and command the flow of data and
-to override sitations that would otherwise lead to compilation error as
-described above:
+TODO: Do we want to move 'Copy to the meta proposal?
 
-- `'Copy` can be applied to a limited reference or an object and triggers a
-  copy operation. The result can be then moved to a limited reference or
-  copied to an object.
-- `'Move` can be applied to a limited reference or an object as long as they're
-  variable (ie no constant, no in parameter) and triggers a move operation.
-  The result can then ne moved to a limited reference or copied to an object.
+A new attributes `'Copy` is introduced and can be applied to a limited
+reference or an object and triggers a copy operation. The result can be then
+moved to a limited reference or copied to an object.
 
 For example:
 
@@ -381,54 +350,6 @@ For example:
 begin
    V3 := V1'Move; -- OK - this is a move from V1 to V3
    V1 := V3'Copy; -- OK - this is a copy from V3 to V1
-```
-
-Erroneous Execution
--------------------
-
-It is erroneous to use an object after it has been moved. The compiler is
-supposed to generate an error where such object is definitely use, and a
-warning where some path in the control flow may lead to such use. For example:
-
-```Ada
-   procedure P (V : limited Holder);
-   V  : limited Holder;
-   V2 : limited Holder;
-   V3 : Holder;
-   V4 : Holder;
-   V5 : limited Holder;
-begin
-  P (V);
-  V.Add_Value (10); -- compiler error, use after move
-
-  V2 := V3'Move;
-  V3.Add_Value (10); -- compiler error, use after move
-
-  if Some_Condition then
-     V5 := V4'Move;
-  end if;
-
-  V4.Add_Value (10);
-  -- warning - may be use after move
-
-  procedure P2 (V : in out Holder) is
-  begin
-     P (V'Move);
-     -- warning - V may be use after move upon return
-  end P2;
-```
-
-However, moving an object to a limited variable afterwards makes usage valid
-again. For example:
-
-```Ada
-   V  : limited Holder := Create_Holder (1000);
-   V2 : limited Holder;
-begin
-   V2 := V;
-   -- Using V generates a compiler error here
-   V := Create_Holder (500);
-   -- Using V is ok now
 ```
 
 Reference-level explanation

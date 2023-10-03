@@ -10,6 +10,19 @@ Summary
 Motivation
 ==========
 
+TODO: option types may allow for control over thread safety without the need of
+a pointer! Maybe this is linked to that.
+
+TODO: synced objects would require mutexes to be created, doesn't look proper
+to let arbitrary accesses be synced. Maybe instead extend / simplify the
+concept of protected?
+
+X : protected Integer; -- X'Move X'Borrow and X'Swap are now synced
+
+TODO: Smart_Access should be the default access under a default profile?
+
+Pragma Ada_Profile (Memory_Safe, Thread_Safe)
+
 
 Guide-level explanation
 =======================
@@ -262,7 +275,11 @@ Rationale and alternatives
 Drawbacks
 =========
 
-See above.
+It's unclear that 'Sync_X operations are reasonably optimize here as they
+relate to a value which is not necessary boxed. So for example, there needs
+to be some kind of association between the address and the mutex, is that
+something that OS APIs typically offer? Otherwise these should always be pointed
+by safe pointers.
 
 Prior art
 =========

@@ -30,26 +30,6 @@ pointer type with the `Safe_Access` aspect applied on it:
    type A is access all Cell with Safe_Access;
 ```
 
-By default, the value pointed by a safe access is not modifiable.
-The following is illegal:
-
-```Ada
-   V : A := new Cell (X => 42);
-
-   V.X := 0; --  run-time error
-```
-
-One direct consequence is that (by default) you can't pass a safe access
-directly to a subprogram:
-
-```Ada
-   V : A := new Cell (X => 42);
-
-   procedure P (Param : A);
-
-   P (V); -- compilation error
-```
-
 By default, aliasing safe accesses is illegal. You can't do the following:
 
 ```Ada
@@ -63,6 +43,10 @@ By default, smart access can't point to the stack. The following is illegal:
    L : aliased Cell;
    V : A := L'Access; --  compilation error
 ```
+
+Dereferencing the value of a smart pointer is done through an extension of the
+borrow semantics, which prevents in particular aliased borrowing. This is
+described in more details in a later section in this RFC.
 
 Aliasing values, modification of the pointed value as well as accessing the
 stack can be done through additional capabilities described in this proposal.
@@ -92,119 +76,12 @@ if assigned a different value:
    end; -- Free the second allocated value
 ```
 
-Move
-----
+Move and Borrow
+---------------
 
-A new attribute, 'Move, is provided to smart accesses. Once moved, the
-value of the access is not reachable by the previous variable - to ensure
-this behavior at run-time, it is reset to null. For example:
-
-You can however move the value from one pointer through the next with the 'Move
-attribute:
-
-```Ada
-   V1 : A := new Cell (X => 42);
-   V2 : A := V1'Move; --  V1 is null after that statement
-
-   procedure P (Param : A);
-
-   P (V'Move);
-```
-
-An additional attribute is provided to swap to values (moving one value to the
-next respectively):
-
-```Ada
-   V1 : A := new Cell (X => 42);
-   V2 : A := new Cell (X => 43);
-begin
-   V1'Swap (V2);
-```
-
-Borrowing
----------
-
-Borrowing is a way to create a temporary move of a pointer to a specific
-object. Borrowing is always scoped, it starts on the initial introduction of
-the 'Borrow up until the end of the scope of the object receiving the borrow
-(which could be a variable, a parameter or a temporary value). Is is equivalent
-to doing a 'Move in one direction, then on the other at the end of said scope.
-For example:
-
-
-```Ada
-   type A is access all Cell with Safe_Pointer;
-
-   V1 : A := new Cell;
-begin
-
-   declare
-      V2 : A;
-   begin
-      V2 := V1'Borrow; -- at this stage, V1 is null, borrowed by V2.
-   end; -- at this stage, V2 get back the borrowed value V1
-```
-
-Note that this synax works for dynamic objects too - at compilation time, a
-straighforward implementation is to generate a temporary for the borrowed
-pointer in order to be able to restore it, so that:
-
-```Ada
-declare
-   V2 : A;
-begin
-   V2 := X.Y.Z'Borrow;
-   X := new Some_Structure;
-end; -- still release the value of the previous pointer
-```
-
-is equivalent to:
-
-```Ada
-declare
-   V2 : A;
-begin
-   -- tmp = X.Y.Z'Access;
-   V2 := X.Y.Z'Borrow;
-   -- X.Y.Z = null
-   X := new Some_Structure;
-   -- tmp.all = V2
-end; -- still release the value of the previous pointer stored in tmp
-```
-
-Borrowing is the canonical way to pass pointers to subprogram where smart
-pointers do not allow aliases:
-
-```Ada
-   V : A;
-
-   procedure P (Param : A);
-
-begin
-
-   P (V'Borrow);
-   --  V is accessible again here
-```
-
-NOTA THE FOLLOWING STATEMENT IS FALSE!!!!!
-
-One of the consequences of the above is that it's not possible to escape a
-borrowed value. Consider the following:
-
-```Ada
-   G : A;
-
-   procedure P (V : A) is
-   begin
-      G := V'Borrow;
-   end P;
-```
-
-In the above example, borrowed value is returned at the end of the procedure
-and G will be reset to null.
-
-The above should be source of analysis for potential mistake by the compiler,
-static analysis or formal proof tools.
+Assignment or parameter passing is not legal by default with safe accesses.
+They need to be done through explicit 'Move and 'Borrow attributes. This is
+allowing to clearly differenciate these operations for aliasing (see below).
 
 Aliased Safe Access
 -------------------
@@ -278,134 +155,14 @@ Adding this capabilty to a pointer allows for a new kind of assignment,
 Other restrictions for safe accesses are still enabled on V2 - in particular
 V2 is readonly in this example.
 
-Write-Enabled Borrowing
------------------------
+Dereferencing and Borrowing
+---------------------------
 
-By default, safe pointers can only be read. It is however possible to
-temporarily borrow a mutable view of the accessed object. Note that as long as
-a mutable view is borrowed, no other object can acquire another mutable view
-nor read the object.
+Borrowing a safe pointer is subject the the same semantics as borrowing any
+other object.
 
-Borrowing a mutable view is done through the 'Write_Borrow aspect:
-
-```Ada
-   type A is access all Cell with Safe_Pointer;
-
-   V1 : A := new Cell;
-begin
-
-   declare
-      V2 : A;
-   begin
-      V2 := V1'Write_Borrow;
-      V2.X := 5; -- legal
-   end; -- borrow to V1 is released
-```
-
-Note that it's prefectly reasonable to have a shorcut version of the above if
-only one statement is needed:
-
-```Ada
-   type A is access all Cell with Safe_Pointer;
-
-   V1 : A := new Cell;
-begin
-   V1'Write_Borrow.X := 5
-```
-
-In that case, the borrow is released right after the assignment.
-
-```Ada
-   type A is access all Cell with Safe_Pointer (Alias);
-
-   V1 : A := new Cell;
-   V2 : A := V1'Alias;
-begin
-
-   declare
-      V3 : A;
-   begin
-      V3 := V1'Write_Borrow;
-      V3.X := 5; -- legal
-      Put_Line (V2.all'Img); -- runtime error
-   end;
-```
-
-Writable and Unritable Views
-----------------------------
-
-A smart access can be refered to through its "writable" view, through the
-'Writable aspect associated with the type, e.g.:
-
-```Ada
-   type A is access all Cell with Safe_Pointer (Alias);
-
-   V1 : A'Writable := new Cell;
-begin
-
-   V1.X := 0; -- legal, V1 is writable
-```
-
-Similarly, a smart access can be refered to as an "readonly" view through
-the 'Readonly aspect. A view that is explicitely readonly cannot be modified
-to a read-write view. For example:
-
-```Ada
-   type A is access all Cell with Safe_Pointer (Alias);
-
-   V1 : A'Readonly := new Cell;
-begin
-   V1'Write_Borrow.X := 0; -- illegal, V1 cannot boe read.
-```
-
-Objects of this kind need to be assigned a writable view, either a borrowed
-or an aliased one. Moving a writable value is also permitted. E.g.:
-
-```Ada
-   V1 : A := new Cell;
-   V2 : A'Writable := V1'Write_Borrow; -- legal
-
-   V3 : A := new Cell;
-   V4 : A'Writable := V3'Alias; -- compilation error
-
-   V7 : A := new Cell;
-   V8 : A'Writable := V7'Move; -- run-time error
-
-   V9 : A := new Cell;
-   V10 : A := V9'Write_Borrow;
-   V11 : A'Writable := V10'Move; -- OK
-```
-
-'Writable can also be used in subprogram parameters to express the fact that
-the target object needs to always be writable:
-
-```Ada
-   V1 : A := new Cell;
-
-   procedure P (V : A'Writable);
-begin
-   P (V1'Borrow); -- run-time error
-   P (V1'Writable_Borrow) -- legal
-```
-
-An object can also be assigned to a writable view. It can be further borrowed,
-but can never be aliased (as aliasing would create a readable view which can
-never be read):
-
-```Ada
-   V1 : A'Writable := new Cell;
-
-   procedure P (V : A);
-
-   P (V1'Borrow); -- legal
-   P (V1'Write_Borrow); -- legal
-   P (V1'Alias); -- compilation error
-```
-
-Dereferencing
--------------
-
-Dereferencing always implies a borrow operation. For example:
+Dereferencing always implies a borrow on the target object operation. For
+example:
 
 ```Ada
    procedure P (X : Cell);
@@ -425,22 +182,41 @@ begin
    V'Borrow.X := 0;
 ```
 
-Usage of dereferenced smart pointers needs to be consistent with their state.
-In particular:
-
-- Smart pointers that are in a state which forbids reading their content cannot
-  be dereferenced.
-- Smart pointer that are in a state which forbids modifying their content cannot
-  have a referenced value used
-
-Dereferencing for a read-write view of a access needs to be done from a writable
-view, for example:
+Depending on the context, this borrow operation may create either a readonly
+or a read-write borrow operation. For example:
 
 ```Ada
-   procedure P (X : in out Cell);
+   type A is access all Cell with Safe_Pointer;
+
    V1 : A := new Cell;
+
+   procedure P1 (V : Cell);
+   procedure P2 (V : in out Cell);
 begin
-   P (V'Write_Borrow.all);
+   P1 (V1.all); --  Create a readonly borrowing
+   P2 (V1.all); -- Creates a read-write borrowing for the duration of the call
+
+   V1.X := 0; -- Create a read-write borrowing for the duration of the assignment
+```
+
+Borrowing a read-write view of an object has consequences on the operations that
+can then be performed by the pointer. For the duration of the borrowing, no
+other code can dereference that pointer, even just for reading. This is checked
+dynamically by some state stored by the pointer. As a consequence, the following
+will yield an exception:
+
+```Ada
+   type A is access all Cell with Safe_Pointer;
+
+   V1 : A := new Cell;
+
+   procedure P1 (Arg1 : Cell; Arg2 : A) is
+   begin
+      Arg2.X := 0; -- Exception raised, the Arg2 actual is protected against access
+   end Pl;
+
+begin
+   P1 (V1.all, V1);
 ```
 
 Accessing the Stack with Safe Pointers
@@ -458,32 +234,6 @@ attributes is equivalent to creating a weak alias to it:
 
    C : aliased Cell;
    V : A := C'Access; -- legal, V is a weak alias to the C value.
-```
-
-More on non-writable accessed data
-----------------------------------
-
-Note that a safe pointer is only controlling the fact that it pointed object
-is writable or not. The pointed object may have additional fields that are
-themselves pointers and handled separately. As a consequence, the following
-is legal:
-
-```Ada
-   type C1 is record
-      X : Integer;
-   end record;
-
-   type A1 is access all C1;
-
-   type C2 is record
-      C : C1;
-   end record;
-
-   type A2 is access all C2 with Safe_Access;
-
-   V : A2 := new C2'(C => new C1);
-begin
-   V.C.X := 0;
 ```
 
 Safe accesses and returned values
@@ -522,6 +272,12 @@ create an in-place initialization:
    begin
       return new Cell; -- OK
    end New_G;
+
+   function New_G return A is
+      L : A := new Cell;
+   begin
+      return L'Move; -- OK
+   end New_G;
 ```
 
 Boolean attributes
@@ -531,42 +287,46 @@ The following boolean attributes are available for safe pointer in order to
 allow quering their state:
 
 - V'Is_Unchecked_Alias - return true if V is an unchecked reference
-- V'Is_Writable - return true if V can be written
-- V'Is_Readable - return true if the value can be read (ie there's no write reference elsewhere)
+- V'Is_Borrowable - return true if V can be borrowed
 - V'Aliases - return the current value of the reference counter
 
-This allows to write contracts and checks on the status of pointers that go
-beyong what could be done with the structural 'Writable attribute:
+This can help checking wether a particular operation is possible on a smart
+access. The example in a previous section could be safely rewritten:
 
 ```Ada
-   procedure Proc (P1, P2 : A)
-   with Pre => P1'Is_Writable or P2'Is_Writable
+   type A is access all Cell with Safe_Pointer;
 
-   procedure Proc (P1, P2 : A) is
+   V1 : A := new Cell;
+
+   procedure P1 (Arg1 : Cell; Arg2 : A) is
    begin
-      if P1'Is_Writable then
-         P1.X := 0;
-      else
-         P2.X := 0;
+      if Arg2'Is_Borrowable then
+         Arg2.X := 0; -- Exception raised, the Arg2 actual is protected against access
       end if;
-   end Proc;
+   end Pl;
+
+begin
+   P1 (V1.all, V1);
 ```
 
-Thread-Safe pointers
---------------------
+This could also be used as a precondition:
 
-By default, safe pointers are thread-safe. This means that they can be accessed
-from multiple thread, and that reference counting as well as flag setting
-operations are atomic. An optimized implementation would implement these
-operations through so called lock-free instructions.
-
-An optional configuration can be offered to optimize safe accesses in cases
-where they're either single threaded, or where the developper wants to take
-the responsbilty of ensuring absence of race conditions:
-
+```Ada
+   procedure P1 (Arg1 : Cell; Arg2 : A)
+   with Pre => Arg2'Is_Borrowable;
 ```
-   type A is access all Cell with Safe_Access (Thread_Safe => False);
+
+Note that in presences of aliases, the borrowable property of an argument can
+change within the procedure. A more restrictive version of the above ensuring
+that there are no other aliases when calling that subprogam:
+
+```Ada
+   procedure P1 (Arg1 : Cell; Arg2 : A)
+   with Pre => Arg2'Is_Borrowable and then Arg2'Aliases = 0;
 ```
+
+This is still insufficient in the context of multi-thread applications, which
+are discussed in a separate RFC.
 
 Conversion from unsafe pointers
 -------------------------------
@@ -604,11 +364,13 @@ pointer types:
 
 - The accessed data needs to be possibly associated with a reference count
 - The accessed data needs to be possibly associated with a flag following if it
-  has an active write reference.
+  has an active write borrow.
 - The access needs to have a flag to know if it's a weak access
 
 An optimised implementation would only create the above data when necessary
-(that is, for access types allowing the above operations).
+(that is, for access types allowing the above operations). In particular,
+smart pointers that allow neither aliasing nor weark references do not need
+any additional data.
 
 In addition to the above, it's important to note additional checks needed
 upon access to the data when write references are allowed. Each time an access
@@ -617,6 +379,9 @@ allowed.
 
 Generalization to non-access types
 ----------------------------------
+
+TODO: isn't it where we hit what we already describe in the limited types?
+Could we just have either one or the other concept?
 
 The concept of safe accesses can be extended to any types. Indeed, it is
 sometimes convenient to create one "virtual" access, for example through
