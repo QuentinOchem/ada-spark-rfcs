@@ -13,7 +13,9 @@ Motivation
 Guide-level explanation
 =======================
 
-Two needs have emerged somewhat simulaneously to improve the language:
+This proposal studies the possibilty to develop a memory-safe and thread-safe
+model for Ada, inspired by C++ move semantics and Rust borrow checker. The
+following aspects are discussed:
 
 - The capacity to identify an object as containing a unique value. This is
   similar to what's called a rvalue reference in C++. See
@@ -22,18 +24,13 @@ Two needs have emerged somewhat simulaneously to improve the language:
   operations for objects pointed by dynamic memory. This is similar to Rust
   borrow semantics. See
   `Safe access <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited_access.md>`_
-- Additional thread safety capabilities. See `Limited <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-thread_safety.md>`_
+- Additional thread safety capabilities.
+See `Limited <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-thread_safety.md>`_
 - A way to control backward incompatible semantics on the above and ensure that
-  the default mode is the safe one. See `Language profiles <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-profile.md>`_
+  the default mode is the safe one.
+  See `Language profiles <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-profile.md>`_
 
-These two concept introduce commonly new notions to the Ada programming
-language, notably the concept of moving and borrowing an object.
-
-This part of the RFC is about defining these two notions, used in following
-RFCs:
-
-- limited references, used to implement uniqueness of values
-- safe access, used to control usage of dynamic memory.
+The rest of this RFC define the fundamental concepts that the above is based on.
 
 Move
 ----
@@ -181,8 +178,8 @@ illegal:
    end P;
 ```
 
-'Copy and 'Alias
-----------------
+Copy and Alias
+--------------
 
 Two new operations are provided:
 
@@ -261,19 +258,12 @@ Rationale and alternatives
 Drawbacks
 =========
 
-It's unclear that 'Sync_X operations are reasonably optimize here as they
-relate to a value which is not necessary boxed. So for example, there needs
-to be some kind of association between the address and the mutex, is that
-something that OS APIs typically offer? Otherwise these should always be pointed
-by safe pointers.
-
 Prior art
 =========
 
 
 Unresolved questions
 ====================
-
 
 Future possibilities
 ====================

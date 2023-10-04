@@ -219,7 +219,7 @@ begin
 ```
 
 Accessing the Stack with Limited Pointers
---------------------------------------
+-----------------------------------------
 
 By construction, the memory in stack or global data is managed automatically
 by the application. As a consequence, it is not possible to have a regular
@@ -236,7 +236,7 @@ attributes is equivalent to creating a weak alias to it:
 ```
 
 Limited accesses and returned values
----------------------------------
+------------------------------------
 
 Returning limited access values follow similar rules as for other limited
 objects. In particular, it is not possible to return directly a limited access
@@ -403,3 +403,8 @@ Unresolved questions
 
 Future possibilities
 ====================
+
+On of the topic that is not addressed in these proposals is the concept of
+lifetimes. Ada has a somewhat similar topic, accessibilty checks, which could
+be extended. It's not clear yet how useful it would be to go beyond what's
+already available, but can be considered as an extension.
