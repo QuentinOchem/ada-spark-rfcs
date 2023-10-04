@@ -10,20 +10,6 @@ Summary
 Motivation
 ==========
 
-TODO: option types may allow for control over thread safety without the need of
-a pointer! Maybe this is linked to that.
-
-TODO: synced objects would require mutexes to be created, doesn't look proper
-to let arbitrary accesses be synced. Maybe instead extend / simplify the
-concept of protected?
-
-X : protected Integer; -- X'Move X'Borrow and X'Swap are now synced
-
-TODO: Smart_Access should be the default access under a default profile?
-
-Pragma Ada_Profile (Memory_Safe, Thread_Safe)
-
-
 Guide-level explanation
 =======================
 
@@ -35,7 +21,10 @@ Two needs have emerged somewhat simulaneously to improve the language:
 - The capacity to control the number of aliases and allowed read / write
   operations for objects pointed by dynamic memory. This is similar to Rust
   borrow semantics. See
-  `Safe access <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-safe-access.md>`_
+  `Safe access <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited_access.md>`_
+- Additional thread safety capabilities. See `Limited <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-thread_safety.md>`_
+- A way to control backward incompatible semantics on the above and ensure that
+  the default mode is the safe one. See `Language profiles <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-profile.md>`_
 
 These two concept introduce commonly new notions to the Ada programming
 language, notably the concept of moving and borrowing an object.
@@ -192,6 +181,60 @@ illegal:
    end P;
 ```
 
+'Copy and 'Alias
+----------------
+
+Two new operations are provided:
+
+- 'Alias, which is in principle providing a so-called "shallow" copy
+- 'Copy, which is in principle providing a so-called "deep" copy
+
+The meaning of shallow and deep copies / 'Alias and 'Copy depends on the limited
+types. For example, the semantic is the same for scalar types, but differ
+significantely for tagged types. See specific sections for more details.
+
+By default, these operations are not available for types.
+
+When possible, a type that allow 'Alias is introduced by the Alias (On|Off) aspect.
+A type that allows copies is introduced by the Copiable aspect. The private
+view of a type may restrict the types of operations allowed. For examples:
+
+```Ada
+package P is
+
+   type T1 is limited private;
+   type T2 is limited private with Alias => On;
+   type T3 is limited private with Alias => On;
+
+private
+
+   type T1 is limited null record with Alias => On, Copy => On; -- OK
+   type T2 is limited null record with Alias => On;  -- OK
+   type T3 is limited null record; -- compilation error, missing Aliasable aspect
+
+end P;
+```
+
+These can then be used as follows:
+
+```Ada
+package body P is
+
+   procedure Proc (V : T1) is
+      L : T1 := V'Copy;
+   begin
+      null;
+   end Proc;
+
+end P;
+```
+
+It is the responsibility of the type implemented to decide is an Alias is ok or
+not. For example, an alias to a linked list would not be ok unless specific
+reference counting mechanism is provided.
+
+Aliasing and Copy cannot be enabled on a specific object.
+
 Swap
 ----
 
@@ -206,63 +249,6 @@ begin
 
 It's important to provide this primitive, as move semantics do not allow to
 temporarily topy a value as it's usually done in swap implementation.
-
-Thread-Safety
--------------
-
-By default, Move and Borrow operations are not thread-safe. However, it is
-possible to introduce this thread safety with 'Sync_Move, 'Sync_Borrow and
-'Sync_Swap respectively. In these cases, the move operations (or back & forth
-move operations) are done atomically.
-
-White thread-safe, Sync_Move does not guarantee that asynchronous operations are
-free of erroneous behaviors. Notably:
-
-```Ada
-   X : Handle;
-
-   task T1 is
-      Y : Handle;
-   begin
-      Y := X'Sync_Move;
-   end T1;
-
-   task T2 is
-      Y : Handle;
-   begin
-      Y := X'Sync_Move;
-   end T2;
-```
-
-In the above code, one of the task does the proper move operation. For the
-other, accessing X is erroneous. Depending on the run-time behavior, this
-can be however bounded. For example, if X is a pointer, its value is null and
-dynamic checking on the value of Y can be made (ie - did I manage to move the
-value indeed).
-
-'Sync_Swap is an atomic operation. It is thread safe.
-
-'Sync_Borrow creates a lock on the object itself so that no other thread
-can either move, swap or borrow the value synchronously. The above can be
-rewritten:
-
-```Ada
-   X : Handle;
-
-   task T1 is
-      Y : Handle;
-   begin
-      Y := X'Sync_Borrow;
-      -- Y is valid until the end of the scope, then returned
-   end T1;
-
-   task T2 is
-      Y : Handle;
-   begin
-      Y := X'Sync_Borrow;
-      -- Y is valid until the end of the scope, then returned
-   end T2;
-```
 
 Reference-level explanation
 ===========================
@@ -291,79 +277,3 @@ Unresolved questions
 
 Future possibilities
 ====================
-
-
-Thread-Safety Additional Constraints
-------------------------------------
-
-To fully acheive memory safety in the context of threads, we need to go beyond
-what this proposal is making. We need to be able to mark clearly operation as
-being thread safe. For example, such subprogram could be marked "Thread_Safe":
-
-```Ada
-   procedure P with Thread_Safe;
-```
-
-To be thread-safe, a procedure must follow the following restrictions:
-
-- It can only call other thread-safe operations
-- It can only refer to copies or thread-safe copies / move / borrows of objects
-  that are declared outside of its scope or that can be escaped from its scope
-  (notably all pointers need to be dereferenced in a thread_safe way).
-
-For example the following is illegal:
-
-```Ada
-   procedure P (V : access Integer) with Thread_Safe is
-   begin
-      V.all := 10; -- Error, dereference is not thread safe
-   end P;
-```
-
-However this will work:
-
-```Ada
-   procedure P (V : access Integer) with Thread_Safe is
-   begin
-      V'Sync_Borrow.all := 10;
-   end P;
-```
-
-Note that a thread safe subprogram may be called in a thread unsafe context.
-Take for example:
-
-```Ada
-   procedure P (V : in out Integer) with Thread_Safe is
-   begin
-      V.all := 10;
-   end P;
-
-   A : access Integer;
-
-   P (A.all);             -- Called from a thread unsafe context
-   P (A'Sync_Borrow.all); -- Called from a thread safe context
-```
-
-Interrestingly, protected objects and tasks are not thread safe as they're
-currently able to operate on arbitrary pointers. Under this proposal, we
-would mark tasks and protected objects procedures Thread_Safe by default. This
-is backwards-incompatible but is probably important enough to allow it and
-force users to explicitely allow non-thread safety, e.g. in:
-
-
-```Ada
-   A : access Integer;
-
-   task T with Thread_Safe => False;
-
-   task T is
-   begin
-      A.all := 0; -- OK because T is not thread safe
-   end T;
-```
-
-We should also allow for Thread_Safe to be default true for a given package
-or a given partition.
-
-Other proposals (safe pointers notably) further refines what can be done with
-thread safety

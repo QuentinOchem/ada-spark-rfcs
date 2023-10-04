@@ -329,29 +329,6 @@ their results:
 | (A : in out T)  | copy/ref | borrow        | error          | copy/ref   | copy/ref       | borrow          |
 | (A : limited T) | error    | move          | error          | error      | error          | move            |
 
-'Copy
------
-
-TODO: Do we want to move 'Copy to the meta proposal?
-
-A new attributes `'Copy` is introduced and can be applied to a limited
-reference or an object and triggers a copy operation. The result can be then
-moved to a limited reference or copied to an object.
-
-For example:
-
-```Ada
-   function Create_Holder return Holder;
-
-   V1 : Holder (Create_Holder); -- Move constructor
-   V2 : Holder := Create_Holder; -- Move assignment
-   V3 : limited Holder := Create_Holder;
-   V4 : limited Holder;
-begin
-   V3 := V1'Move; -- OK - this is a move from V1 to V3
-   V1 := V3'Copy; -- OK - this is a copy from V3 to V1
-```
-
 Reference-level explanation
 ===========================
 

@@ -14,44 +14,54 @@ Motivation
 Guide-level explanation
 =======================
 
-Safe Accesses
---------------
+Limited Accesses
+----------------
 
-This RFC introduces the concept of safe access (somehwat similar to smart
+This RFC defines rules related to limited access (somehwat similar to smart
 pointer) which is an access type with additional capabilities such as automatic
-memory reclaimation or reference counting. A smart access is declared on a
-pointer type with the `Safe_Access` aspect applied on it:
+memory reclaimation or reference counting. A limited access is introduced by
+the usage of the word `limited` in its declaration:
 
 ```Ada
    type Cell is record
       X : Integer;
    end record;
 
-   type A is access all Cell with Safe_Access;
+   type A is limited access all Cell;
 ```
 
-By default, aliasing safe accesses is illegal. You can't do the following:
+Note that it is also possible to declare a type as being explicitely
+non-limited:
+
+```Ada
+   type A is not limited access all Cell;
+```
+
+This can be useful as there are ways (described outside this RFC) to decide
+on which kind of access should be the default one.
+
+By default, aliasing limited accesses is illegal. You can't do the following:
 
 ```Ada
    V1 : A := new Cell (X => 42);
    V2 : A := V1; --  compilation error
 ```
 
-By default, smart access can't point to the stack. The following is illegal:
+By default, limited access can't point to the stack. The following is illegal:
 
 ```Ada
    L : aliased Cell;
    V : A := L'Access; --  compilation error
 ```
 
-Dereferencing the value of a smart pointer is done through an extension of the
+Dereferencing the value of a limited access is done through an extension of the
 borrow semantics, which prevents in particular aliased borrowing. This is
 described in more details in a later section in this RFC.
 
 Aliasing values, modification of the pointed value as well as accessing the
 stack can be done through additional capabilities described in this proposal.
 
-Memory pointed by smart accesses can be manually reclaimed:
+Memory pointed by limited accesses can be manually reclaimed:
 
 ```Ada
    declare
@@ -76,22 +86,14 @@ if assigned a different value:
    end; -- Free the second allocated value
 ```
 
-Move and Borrow
----------------
+Aliased Limited Accesses
+------------------------
 
-Assignment or parameter passing is not legal by default with safe accesses.
-They need to be done through explicit 'Move and 'Borrow attributes. This is
-allowing to clearly differenciate these operations for aliasing (see below).
-
-Aliased Safe Access
--------------------
-
-A safe access can be configured to allow  aliases. Allowing
-aliases on safe pointers enables refconting. This can be specified by adding
-a parameter to the Safe_Access aspect:
+Limited access do not provide a 'Copy primitive, copies cannot be enabled.
+By default, they do not allow aliasing, but can be configured to allow that
 
 ```Ada
-   type A is access all Cell with Safe_Access => (Alias);
+   type A is limited access all Cell with Alias => On;
 ```
 
 Adding this capabilty to a pointer allows for a new kind of assignment, 'Alias,
@@ -116,11 +118,11 @@ An alias can be used in a subprogram call:
 
    procedure P (Param : A);
 
-   P (V'Alias); -- compilation error
+   P (V'Alias);
 ```
 
-Note that the reference counter is automatically decreased upong finalization
-of the safe access - which can lead to a deallocation of the object.
+Note that the reference counter is automatically decreased upong destruction
+of the limited access - which can lead to a deallocation of the object.
 
 Unchecked Aliases
 -----------------
@@ -132,10 +134,10 @@ all the other object are dereferenced. It's however possible, as long as the
 pointer type allows such operation:
 
 ```Ada
-   type A is access all Cell with Safe_Access => (Unchecked_Alias);
+   type A is limited access all Cell with Unchecked_Alias => On;
 ```
 
-Note that Unchecked_Alias implies Alias.
+Note that Unchecked_Alias => On implies Alias => On.
 
 Adding this capabilty to a pointer allows for a new kind of assignment,
 'Unchecked_Alias:
@@ -152,17 +154,14 @@ Adding this capabilty to a pointer allows for a new kind of assignment,
       -- There's no protection against V2 usage at this stage
 ```
 
-Other restrictions for safe accesses are still enabled on V2 - in particular
+Other restrictions for limited accesses are still enabled on V2 - in particular
 V2 is readonly in this example.
 
 Dereferencing and Borrowing
 ---------------------------
 
-Borrowing a safe pointer is subject the the same semantics as borrowing any
-other object.
-
-Dereferencing always implies a borrow on the target object operation. For
-example:
+Dereferencing a limited access always implies a borrow on the target object
+operation. For example:
 
 ```Ada
    procedure P (X : Cell);
@@ -186,7 +185,7 @@ Depending on the context, this borrow operation may create either a readonly
 or a read-write borrow operation. For example:
 
 ```Ada
-   type A is access all Cell with Safe_Pointer;
+   type A is limited access all Cell;
 
    V1 : A := new Cell;
 
@@ -206,7 +205,7 @@ dynamically by some state stored by the pointer. As a consequence, the following
 will yield an exception:
 
 ```Ada
-   type A is access all Cell with Safe_Pointer;
+   type A is limited access all Cell;
 
    V1 : A := new Cell;
 
@@ -219,7 +218,7 @@ begin
    P1 (V1.all, V1);
 ```
 
-Accessing the Stack with Safe Pointers
+Accessing the Stack with Limited Pointers
 --------------------------------------
 
 By construction, the memory in stack or global data is managed automatically
@@ -230,18 +229,18 @@ Setting the value of an object through the 'Access or 'Unchecked_Access
 attributes is equivalent to creating a weak alias to it:
 
 ```Ada
-   type A is access all Cell with Safe_Pointer (Unchecked_Alias);
+   type A is access all Cell with Unchecked_Alias => On;
 
    C : aliased Cell;
    V : A := C'Access; -- legal, V is a weak alias to the C value.
 ```
 
-Safe accesses and returned values
+Limited accesses and returned values
 ---------------------------------
 
-Returning safe access values follow similar rules as for limited types. In
-particular, it is not possible to return directly a safe access as it may
-generate a copy:
+Returning limited access values follow similar rules as for other limited
+objects. In particular, it is not possible to return directly a limited access
+as it may generate a copy:
 
 ```Ada
    G : A := new Cell;
@@ -256,6 +255,8 @@ It is possible however to create an aliased view, use the move attribute or
 create an in-place initialization:
 
 ```Ada
+   type A is limited access Cell;
+
    G : A := new Cell;
 
    function Get_G return A is
@@ -283,7 +284,7 @@ create an in-place initialization:
 Boolean attributes
 ------------------
 
-The following boolean attributes are available for safe pointer in order to
+The following boolean attributes are available for limited accesses in order to
 allow quering their state:
 
 - V'Is_Unchecked_Alias - return true if V is an unchecked reference
@@ -294,7 +295,7 @@ This can help checking wether a particular operation is possible on a smart
 access. The example in a previous section could be safely rewritten:
 
 ```Ada
-   type A is access all Cell with Safe_Pointer;
+   type A is limited access all Cell;
 
    V1 : A := new Cell;
 
@@ -335,8 +336,8 @@ Converting a regular access type to a safe access is a fundamental unsafe
 operation. It is forbidden:
 
 ```
-   type A1 is access all Cell;
-   type A2 is access all Cell with Safe_Access;
+   type A1 is not limited access all Cell;
+   type A2 is limited access all Cell;
 
    V1 : A1 := new Cell;
    V2 : A2 := A2 (V1); -- illegal
@@ -346,8 +347,8 @@ A workaround to the above is to consider the accessed data to be a weak access
 and use 'Access as if it were data on the stack:
 
 ```
-   type A1 is access all Cell;
-   type A2 is access all Cell with Safe_Access (Unchecked_Alias);
+   type A1 is not limited access all Cell;
+   type A2 is limited access all Cell with Unchecked_Alias => On;
 
    V1 : A1 := new Cell;
    V2 : A2 := V1.all'Access;
@@ -355,11 +356,10 @@ and use 'Access as if it were data on the stack:
 
 The guarantees provided there are then the same ones as for weak accesses.
 
-
 Data representation and perfomance considerations
 -------------------------------------------------
 
-A natural implementation of safe pointers is to add additional fields to the
+A natural implementation of limited accesses is to add additional fields to the
 pointer types:
 
 - The accessed data needs to be possibly associated with a reference count
@@ -376,35 +376,6 @@ In addition to the above, it's important to note additional checks needed
 upon access to the data when write references are allowed. Each time an access
 is performed, a boolean check need to be performed to know if the operation is
 allowed.
-
-Generalization to non-access types
-----------------------------------
-
-TODO: isn't it where we hit what we already describe in the limited types?
-Could we just have either one or the other concept?
-
-The concept of safe accesses can be extended to any types. Indeed, it is
-sometimes convenient to create one "virtual" access, for example through
-an integer handle:
-
-```
-   type Handle is Integer with Safe_Access;
-```
-
-In these cases, the compiler will add necessary data to implement semantics.
-For example:
-
-```
-   type Handle is Integer with Safe_Access (Alias);
-
-   V1 : Handle := Get_Handle;
-
-   V2 := V1'Alias; -- refcount
-```
-
-If the type has a destructor associated with it (assuming OOP RFC) or is a
-controlled type (assuming controlled types are not obsolete), then finalization
-will be called when refcount reaches 0.
 
 Reference-level explanation
 ===========================
