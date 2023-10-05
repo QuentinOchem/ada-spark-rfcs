@@ -42,8 +42,9 @@ being used. Depending on the situation, this can be checked at run-time, by the
 compiler or by static analysis and formal analysis tools.
 
 This concept of move can be used in various ways by specific proposals. However,
-it can be used right away in Ada through the use of the 'Move attribute. When
-applied to a pointer, the semantic of a move operation is:
+it can be used right away in Ada through the use of the 'Move attribute.
+
+When applied to an access type, the semantic of a move operation is:
 - to assign the value from the source pointer to the target pointer
 - to reset the source pointer to null.
 
@@ -106,11 +107,10 @@ Borrow
 
 A borrow operation is a temporary move operation, introduced by the 'Borrow
 attribute. Borrowing is always scoped, it starts on the initial introduction of
-the 'Borrow up until the end of the scope of the reference receiving the borrow
+the 'Borrow call up until the end of the scope of the reference receiving the borrow
 (which could be a variable, a parameter or a temporary value). Is is equivalent
 to doing a 'Move in one direction, then on the other at the end of said scope.
-An additional constraint is that a borrow operation is always constant. For
-example, in the context of a local constant:
+For example, in the context of a local constant:
 
 ```Ada
    type Handle is new Integer;
@@ -118,7 +118,7 @@ example, in the context of a local constant:
    V1 : Handle := 0;
 begin
    declare
-      V2 : constant Handle := V1'Borrow;
+      V2 : Handle := V1'Borrow;
    begin
       null;
       --  At this point, V2 has the value of V1
@@ -149,7 +149,7 @@ declare
    V2 : constant Handle := X.Y.Z'Borrow;
 begin
    X := new Some_Structure;
-end; -- still release the value of the previous pointer
+end; -- X.Y.Z is released here
 ```
 
 is equivalent to:
@@ -163,11 +163,10 @@ begin
    -- X.Y.Z = null
    X := new Some_Structure;
    -- tmp.all = V2
-end; -- still release the value of the previous pointer stored in tmp
+end; -- X.Y.Z is released here
 ```
 
-Note that the borrowed value needs to be locally scoped. The following is
-illegal:
+Borrowed value needs to be locally scoped. The following is illegal:
 
 ```Ada
    G : Handle;
@@ -178,23 +177,24 @@ illegal:
    end P;
 ```
 
-Copy and Alias
---------------
+Clone and Alias
+---------------
 
 Two new operations are provided:
 
 - 'Alias, which is in principle providing a so-called "shallow" copy
-- 'Copy, which is in principle providing a so-called "deep" copy
+- 'Clone, which is in principle providing a so-called "deep" copy
 
-The meaning of shallow and deep copies / 'Alias and 'Copy depends on the limited
+The meaning of shallow and deep copies / 'Alias and 'Clone depends on the limited
 types. For example, the semantic is the same for scalar types, but differ
 significantely for tagged types. See specific sections for more details.
 
-By default, these operations are not available for types.
+These operations are available for all Ada types with the exception of limited
+types.
 
-When possible, a type that allow 'Alias is introduced by the Alias (On|Off) aspect.
-A type that allows copies is introduced by the Copiable aspect. The private
-view of a type may restrict the types of operations allowed. For examples:
+A limited type that allow 'Alias is introduced by the Alias (On|Off) aspect.
+A type that allows copies is introduced by the Clone aspect. The private
+view of a type may restrict the types of operations allowed. For example:
 
 ```Ada
 package P is
@@ -205,9 +205,9 @@ package P is
 
 private
 
-   type T1 is limited null record with Alias => On, Copy => On; -- OK
+   type T1 is limited null record with Alias => On, Clone => On; -- OK
    type T2 is limited null record with Alias => On;  -- OK
-   type T3 is limited null record; -- compilation error, missing Aliasable aspect
+   type T3 is limited null record; -- compilation error, Alias is Off by default
 
 end P;
 ```
@@ -218,7 +218,7 @@ These can then be used as follows:
 package body P is
 
    procedure Proc (V : T1) is
-      L : T1 := V'Copy;
+      L : T1 := V'Clone;
    begin
       null;
    end Proc;
@@ -230,7 +230,7 @@ It is the responsibility of the type implemented to decide is an Alias is ok or
 not. For example, an alias to a linked list would not be ok unless specific
 reference counting mechanism is provided.
 
-Aliasing and Copy cannot be enabled on a specific object.
+Aliasing and Clone cannot be enabled at the object level.
 
 Swap
 ----

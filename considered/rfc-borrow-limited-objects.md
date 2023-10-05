@@ -30,11 +30,11 @@ Guide-level explanation
 Limited References
 ------------------
 
-We're introducing a new kind of object: the limited reference. Two specific
+We're introducing a new kind of object: the limited object. Two specific
 data manipulations have a modified sematic:
-- The assignment instruction is making a move from the right end to the
-  left end.
-- A parameter passing is making a borrow  ov the value.
+- Assignment (or initialization) to a limited object is expecting to perform a
+  move. A move is only done from so-called rvalues references, that is values
+  that are semantically  known not to be used after the operation.
 
 A limited reference is denoted by the mode ``limited``. Here are some examples:
 
@@ -50,12 +50,9 @@ A limited reference is denoted by the mode ``limited``. Here are some examples:
 
 Move to limited references have constraints. They can only be assigned:
 
-- Other limited references, in which case values are moved from one reference
-  to the next as opposed to copied (more on the differences between move and
-  copy later).
 - A temporary value not referenced by any other object (some languages such as
   C++ call these rvalues).
-- An explicit move
+- An explicit 'Clone, 'Move or 'Borrow calls.
 
 ```Ada
    V1 : limited Integer := 1; -- OK
@@ -75,6 +72,10 @@ Move to limited references have constraints. They can only be assigned:
    begin
       L := V; -- Compilation Error
    end P2;
+
+   V8 : limited Integer := 1;
+   V9 : limited Integer := V8; -- Compilation Error
+   V10 : limited Integer := V8'Move; -- OK
 ```
 
 When passed by reference to parameters, values are borrowed:
@@ -178,7 +179,7 @@ Consider:
    V2 : limited Holder;
    V3 : limited Holder;
 begin
-   V2 := V3; -- legal, move semantics
+   V2 := V3; -- legal, move semantics TBD - NOT LEGAL! Needs V2 := V3'Move!!!
    V2 := V1; -- Compilation error
 ```
 
