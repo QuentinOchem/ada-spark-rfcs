@@ -25,10 +25,10 @@ following aspects are discussed:
   borrow semantics. See
   [Safe access](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited_access.md>)
 - Additional thread safety capabilities.
-See [Thread Safety](<https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-thread_safety.md>`)
+See [Thread Safety](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-thread_safety.md)
 - A way to control backward incompatible semantics on the above and ensure that
   the default mode is the safe one.
-  See [Language profiles](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-profile.md>)
+  See [Language profiles](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-profile.md)
 
 The rest of this RFC define the fundamental concepts that the above is based on.
 
