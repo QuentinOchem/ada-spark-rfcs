@@ -19,16 +19,16 @@ following aspects are discussed:
 
 - The capacity to identify an object as containing a unique value. This is
   similar to what's called a rvalue reference in C++. See
-  `Limited objects <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited-objects.md>`_
+  [Limited objects](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited-objects.md)
 - The capacity to control the number of aliases and allowed read / write
   operations for objects pointed by dynamic memory. This is similar to Rust
   borrow semantics. See
-  `Safe access <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited_access.md>`_
+  [Safe access](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited_access.md>)
 - Additional thread safety capabilities.
-See `Limited <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-thread_safety.md>`_
+See [Thread Safety](<https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-thread_safety.md>`)
 - A way to control backward incompatible semantics on the above and ensure that
   the default mode is the safe one.
-  See `Language profiles <https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-profile.md>`_
+  See [Language profiles](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-profile.md>)
 
 The rest of this RFC define the fundamental concepts that the above is based on.
 
