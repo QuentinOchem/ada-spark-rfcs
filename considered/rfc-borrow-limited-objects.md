@@ -177,70 +177,16 @@ Consider:
 
    V1 : Holder;
    V2 : limited Holder;
-   V3 : limited Holder;
 begin
-   V2 := V3; -- legal, move semantics TBD - NOT LEGAL! Needs V2 := V3'Move!!!
-   V2 := V1; -- Compilation error
+   V2 := V1'Move; -- OK
 ```
-
-Here, V2 inherits from V3 without duplication. But assigning from V1 to V2 is
-illegal due to the copy restriction on limited types.
 
 Limited Access References and Types
 -----------------------------------
 
-TODO: Review this with safe access in mind - a limited access is essentially
-a safe pointer here!
-
-The idea of limited access types introduces further value to move semantics.
-The primary distinction here is between a regular access type,
-which allows both copying and moving, and a limited access type,
-which allows only moving.
-
-This first example demonstrates the usage of a limited reference for a
-regular pointer object:
-
-```Ada
-   type Holder is  ...
-   type A_Holder is access all Holder;
-
-   V1 : limited A_Holder := new Holder;
-   V2 : limited A_Holder;
-begin
-   V2 := V1; -- legal, move semantics. V1 is now null.
-   -- V1 is null here, the compiler will detect or warn possible usage
-```
-
-The pointer type itself can be declared as limited, which not only prevents
-copying but also enforces move semantics on all instances:
-
-```Ada
-   type Holder is  ...
-   type A_Holder is limited access all Holder;
-
-   V1 : A_Holder := new Holder;
-   V2 : A_Holder;
-begin
-   V2 := V1; -- legal, move semantics.  V1 is now null.
-   -- V1 is null here, the compiler will detect or warn possible usage
-```
-
-Access types can also target limited objects, thereby adding another layer of
-restriction.
-
-```Ada
-   type Holder is  ...
-   type A_Holder is access limited Holder;
-
-   V1 : A_Holder := new Holder;
-   V2 : limited Holder;
-   V3 : Holder;
-begin
-   V2 := V1.all; -- legal, move semantics of the pointed object
-   Free (V1);
-   V1 := new Holder;
-   V3 := V1.all; -- Compiler Error
-```
+Access types can themselves be limited. The topic of limited access types is
+sufficiently complex in its own right that it deserves its on RFC, see
+[Limited Access](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited_access.md)
 
 Move Semantics with Object Orientation
 --------------------------------------
@@ -324,11 +270,11 @@ their results:
 | A := B, A => B  | B : T    | B : limited T | B : constant T | (B : in T) | (B : in out T) | (B : limited T) |
 | ----------------| -------- | ------------- | -------------- | ---------- | -------------- | --------------- |
 | A : T           | copy     | error         | copy           | copy       | copy           | error           |
-| A : limited T   | error    | move          | error          | error      | error          | move            |
+| A : limited T   | error    | error         | error          | error      | error          | borrow          |
 | A : constant T  | copy     | error         | copy           | copy       | copy           | error           |
 | (A : in T)      | copy/ref | borrow        | copy/ref       | copy/ref   | copy/ref       | borrow          |
 | (A : in out T)  | copy/ref | borrow        | error          | copy/ref   | copy/ref       | borrow          |
-| (A : limited T) | error    | move          | error          | error      | error          | move            |
+| (A : limited T) | error    | borrow        | error          | error      | error          | borrow          |
 
 Reference-level explanation
 ===========================
@@ -349,24 +295,10 @@ differ notably from Rust and C++:
   to provide Ada developers a clear and distinct signal of the difference
   between standard Ada references and the new references that introduce move semantics.
 
-- Borrow Semantics: While Rust incorporates borrowing semantics both at the
-  variable and parameter levels, our proposal chooses to limit borrowing
-  semantics primarily at the parameter level. This decision could be reverted
-  in an extension of this proposal if deemed useful.
-
 - Overloading with limited: The idea to use overloading with the limited
   parameter can be seen as introducing another layer of complexity.
   However, C++ has demonstrated its usefulness, in particular in the context
   of copy constructors and assignment overload.
-
-- Limited Types and Limited Access References: The way Ada deals with
-  limited types is inherently different from Rust. While Rust defines every
-  type as potentially being moved, Ada's traditional types don't have this
-  property. Introducing move semantics in a way that remains compatible with
-  existing Ada codebases and idioms is crucial, and similiar to C++ choices.
-  By allowing for the definition of limited access types and references, we
-  provide a structured way for Ada developers to opt into move semantics without
-  breaking or complicating their existing code.
 
 - Use After Move: The Ada philosophy centers around safety. As such, ensuring
   that moved objects cannot be accessed is essential for preventing unforeseen
@@ -405,12 +337,3 @@ the safeguards provided by the limited notation. Currently, these behaviors
 manifest as errors or warnings, depending on the certainty of occurrence.
 Leveraging tools like SPARK to further elucidate or validate error
 probabilities would be advantageous.
-
-Additionally, adopting certain coding practices can bolster safety and
-consistency:
-
-- By default, pointer objects should be limited to mitigate unnecessary
-  aliasing and enhance memory safety.
-- Limited types should consistently be accessed via limited references.
-- Some warnings, especially those related to "use after move" in parameters
-  (due to their non-local impact), should escalate to errors.
