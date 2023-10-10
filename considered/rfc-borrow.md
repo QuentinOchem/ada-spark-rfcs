@@ -27,6 +27,8 @@ particular we introduce two fundamental concepts:
   particular so called smart-pointers.
   See [Limited Types](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited_types.md)
 
+Object Orientation is making a specific usage of move semantics, inspired by C++.
+See [Move Constructor](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-move_constructor.md)
 
 On top of these two fundamental concepts, we propose to extend their semantic
 to provide thread safety capabilities..
