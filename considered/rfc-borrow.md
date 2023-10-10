@@ -14,21 +14,27 @@ Guide-level explanation
 =======================
 
 This proposal studies the possibilty to develop a memory-safe and thread-safe
-model for Ada, inspired by C++ move semantics and Rust borrow checker. The
-following aspects are discussed:
+model for Ada, inspired by C++ move semantics and Rust borrow checker. In
+particular we introduce two fundamental concepts:
 
-- The capacity to identify an object as containing a unique value. This is
-  similar to what's called a rvalue reference in C++. See
-  [Limited objects](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited-objects.md)
-- The capacity to control the number of aliases and allowed read / write
-  operations for objects pointed by dynamic memory. This is similar to Rust
-  borrow semantics. See
-  [Safe access](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited_access.md>)
-- Additional thread safety capabilities.
+- A new kind of variable, called a limited reference, which is a references to
+  an object or a value that can't be referenced (or "owned" / "aliased")
+  referenced by others. This is similar to a C++ rvalue reference or a rust
+  variable.
+  See [Limited References](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited-references.md)
+- An extension to limited types, which redefines assignment and parameter
+  passing as being moved or borrow operations. This allows to implement in
+  particular so called smart-pointers.
+  See [Limited Types](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited_types.md)
+
+
+On top of these two fundamental concepts, we propose to extend their semantic
+to provide thread safety capabilities..
 See [Thread Safety](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-thread_safety.md)
-- A way to control backward incompatible semantics on the above and ensure that
-  the default mode is the safe one.
-  See [Language profiles](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-profile.md)
+
+Finally, in order to offer sensible default behavior and handle legacy code, we
+introduce profiles.
+See [Language profiles](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-profile.md)
 
 The rest of this RFC define the fundamental concepts that the above is based on.
 
@@ -36,71 +42,48 @@ Move
 ----
 
 A move operation is a new Ada operation that allows to move a value from an
-reference to another one. Once a value has been moved, it cannot be refered to
-from the previous reference, which needs to be assigned to a new value before
-being used. Depending on the situation, this can be checked at run-time, by the
-compiler or by static analysis and formal analysis tools.
-
-This concept of move can be used in various ways by specific proposals. However,
-it can be used right away in Ada through the use of the 'Move attribute.
-
-When applied to an access type, the semantic of a move operation is:
-- to assign the value from the source pointer to the target pointer
-- to reset the source pointer to null.
-
-For example:
+reference to another one. It is introduced by the 'Move attribute. For example:
 
 ```Ada
    type A is access all Integer;
 
-   V1 : A := new Integer;
-   V2 : A;
+   Srce : A := new Integer;
+   Dst : A;
 begin
-   V2 := V1'Move;
-   --  At this point, V2 points to the object previously pointer by V1
-   --  At this point, V1 is null. Accessing V1 is erroneous.
+   Dst := Src'Move;
 ```
 
-Move can be used for other types. For example:
+Two requirements need to be met for this operation to
+be safe and correct:
+- the source reference moved must own its value
+- the source reference cannot be referenced after the move operation
+
+In general, there is no provision in Ada to verify that either of these
+requirements are met. As a consequence, the compiler will warn of potential
+problems:
 
 ```Ada
-   type Handle is new Integer;
+   type A is access all Integer;
 
-   V1 : Handle := 0;
-   V2 : Handle;
+   Src : A := new Integer;
+   Dst : A;
 begin
-   V2 := V1'Move;
-   --  At this point, V2 has the value of V1
-   --  At this point, accessing V1 is erroneous.
+   Dst := Src'Move;
+   --  warning, Src may not own its value
+   --  warning, Src may be referenced after its ownership is moved
 ```
 
-Note that move operation introduce erroneous execution which may or may not
-be automatically detectable. The compiler must:
-- issue a compiler error where incorrect usage can be statically detected
-- issue a compiler warning where incorrect usage is possible
+We can define special cases where the compiler is responsible for statically
+determinig that there is no problem just by looking at the control flow.
+However, these would only cover a small range of simple cases. The mechanism
+used to get guarantees is the one provided by limited references, described
+in a sub-part of this proposal.
 
-For example:
-
-```Ada
-   type Handle is new Integer;
-
-   V1 : Handle := 0;
-   V2 : Handle;
-begin
-   V2 := V1'Move;
-
-   Put_Line (V1'Img); -- compiler error, used previously moved value
-```
-
-```Ada
-   procedure (X : in out Handle) is
-   begin
-      V2 : Handle;
-   begin
-      V2 := X'Move;
-      --  compiler warning, X may be used after moved
-   end;
-```
+Using 'Move has specific effects on access types and class records:
+- for access types, the value of the source reference is reset to null.
+- for class records, the move constructor is called instead of the copy
+  constructor, which may in effect reset some of the fields of the source
+  reference.
 
 Borrow
 ------
@@ -176,6 +159,8 @@ Borrowed value needs to be locally scoped. The following is illegal:
       G := V'Borrow; - compilation error, borrowing to a value outside of scope
    end P;
 ```
+Contrary to a move operation, a borrow operation doesn't impose constraints
+on the source reference, as the value is given back at the end of the operation.
 
 Clone and Alias
 ---------------
@@ -231,6 +216,26 @@ not. For example, an alias to a linked list would not be ok unless specific
 reference counting mechanism is provided.
 
 Aliasing and Clone cannot be enabled at the object level.
+
+Replace
+-------
+
+'Replace is an operation that moves the value of an object, replacing the
+value of the previous object in the same operation. For example:
+
+```Ada
+   type A is access all Integer;
+
+   Src : A := new Integer;
+   Dst : A;
+begin
+   Dst := Src'Replace (Src, null);
+   --  warning, Src may not own its value
+   --  Src is null here
+```
+
+It is legal to access the value of the previous object after the replace
+operation (while doing so after a move is erroneous).
 
 Swap
 ----
