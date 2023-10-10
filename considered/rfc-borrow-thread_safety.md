@@ -94,6 +94,8 @@ To be thread-safe, a procedure must follow the following restrictions:
 - It can only refer to copies or thread-safe copies / move / borrows of objects
   that are declared outside of its scope or that can be escaped from its scope
   (notably all pointers need to be dereferenced in a thread_safe way).
+- It can only have parameter that are passed by copy, move, or typed as thread
+  safe.
 
 For example the following is illegal:
 
@@ -117,23 +119,14 @@ However this will work:
    end P;
 ```
 
-Note that a thread safe subprogram may be called in a thread unsafe context.
-Take for example:
+Similarily:
 
 ```Ada
-   procedure P (V : in out Integer) with Thread_Safe is
-   begin
-      V.all := 10;
-   end P;
+   type Int_Array is array (Integer range <>) of Integer;
 
-   type Safe_Access is limited access all Integer with Thread_Safe;
-   type Unsafe_Access is limited access all Integer;
-
-   Safe_A : Safe_Access;
-   Unsafe_A : Unsafe_Access;
-
-   P (Safe_A.all);   -- Called from a thread unsafe context
-   P (Unsafe_A.all); -- Called from a thread safe context
+   procedure P (Int_Array : Int_Access) with Thread_Safe;
+   --  compilation error, non thread-safe parameter Int_Array may be passed
+   --  as reference
 ```
 
 Protected objects and tasks are not thread safe as they're
@@ -151,7 +144,7 @@ force users to explicitely allow non-thread safety, e.g. in:
 
    task T is
    begin
-      A.all := 0; -- Compilation Error
+      A.all := 0; -- Ok since we marked T as non-thread safe
    end T;
 ```
 
@@ -166,11 +159,6 @@ Rationale and alternatives
 Drawbacks
 =========
 
-It's unclear that 'Sync_X operations are reasonably optimize here as they
-relate to a value which is not necessary boxed. So for example, there needs
-to be some kind of association between the address and the mutex, is that
-something that OS APIs typically offer? Otherwise these should always be pointed
-by safe pointers.
 
 Prior art
 =========
@@ -182,79 +170,3 @@ Unresolved questions
 
 Future possibilities
 ====================
-
-
-Thread-Safety Additional Constraints
-------------------------------------
-
-To fully acheive memory safety in the context of threads, we need to go beyond
-what this proposal is making. We need to be able to mark clearly operation as
-being thread safe. For example, such subprogram could be marked "Thread_Safe":
-
-```Ada
-   procedure P with Thread_Safe;
-```
-
-To be thread-safe, a procedure must follow the following restrictions:
-
-- It can only call other thread-safe operations
-- It can only refer to copies or thread-safe copies / move / borrows of objects
-  that are declared outside of its scope or that can be escaped from its scope
-  (notably all pointers need to be dereferenced in a thread_safe way).
-
-For example the following is illegal:
-
-```Ada
-   procedure P (V : access Integer) with Thread_Safe is
-   begin
-      V.all := 10; -- Error, dereference is not thread safe
-   end P;
-```
-
-However this will work:
-
-```Ada
-   procedure P (V : access Integer) with Thread_Safe is
-   begin
-      V'Sync_Borrow.all := 10;
-   end P;
-```
-
-Note that a thread safe subprogram may be called in a thread unsafe context.
-Take for example:
-
-```Ada
-   procedure P (V : in out Integer) with Thread_Safe is
-   begin
-      V.all := 10;
-   end P;
-
-   A : access Integer;
-
-   P (A.all);             -- Called from a thread unsafe context
-   P (A'Sync_Borrow.all); -- Called from a thread safe context
-```
-
-Interrestingly, protected objects and tasks are not thread safe as they're
-currently able to operate on arbitrary pointers. Under this proposal, we
-would mark tasks and protected objects procedures Thread_Safe by default. This
-is backwards-incompatible but is probably important enough to allow it and
-force users to explicitely allow non-thread safety, e.g. in:
-
-
-```Ada
-   A : access Integer;
-
-   task T with Thread_Safe => False;
-
-   task T is
-   begin
-      A.all := 0; -- OK because T is not thread safe
-   end T;
-```
-
-We should also allow for Thread_Safe to be default true for a given package
-or a given partition.
-
-Other proposals (safe pointers notably) further refines what can be done with
-thread safety
