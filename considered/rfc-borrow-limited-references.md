@@ -109,7 +109,7 @@ Limited parameters can be either `in`, or `in out` For example:
 
 ```Ada
 
-   procedure F (V : limited in out Integer) return Integer
+   procedure F (V : limited in out Integer) return limited Integer
       L : limited Integer;
    begin
       L := V;
