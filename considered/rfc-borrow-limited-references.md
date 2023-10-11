@@ -7,13 +7,10 @@ Summary
 =======
 
 This proposal introduces a new notation, `limited`, allowing it to be
-associated with a variable or as a parameter mode. The notation designates
-values that should be moved rather than copied. It draws inspiration from the
-C++ rvalue reference and incorporates some safety aspects from Rust's borrow
-checker.
-
-The proposal also delves into the natural extensions of limited types brought
-forth by limited objects and parameters.
+associated with a variable or as a parameter mode. This introduces a so called
+limited reference. The notation designates values that should be moved rather
+than copied. It draws inspiration from the C++ rvalue reference and incorporates
+some safety aspects from Rust's borrow checker.
 
 Motivation
 ==========
@@ -31,10 +28,9 @@ Limited References
 ------------------
 
 We're introducing a new kind of object: the limited reference, introduced by the
-reserved word `limited` in from of the type indication. A limited reference is a
-reference that "owns" its value. Its value cannot be assigned.
-When used between limited references, the assignment operation is modified
-to a move operation. For example:
+reserved word `limited` in front of the type indication. A limited reference is a
+reference that "owns" its value. Its value cannot be assigned or copied - it is
+moved. For example:
 
 ```Ada
    type A is access all Integer;
@@ -50,10 +46,15 @@ objects, they are implicit for limited references.
 
 The language ensures that a limited reference always refers to the value its
 owning. As a consequence, in the example above, the compiler won't issue
-the warnings it would issue on a non-limited move operation.
+the warnings it would issue on tje source of a non-limited move operation
+(we know Src own its value). We may however still issue a warning if the source
+of a move can be refered after the operation and there's no local control
+flow that can guarantee that it is not.
 
-Assignment to a limited reference can be done either through a literal (they
-create a new value) or through another limtied reference.
+Assignment to a limited reference can also be done through a literal or the
+limited returned value of a function, in which case no warning is issed (but
+inside the function, there may be a check that the source of the limited
+value can be used after the move).
 
 Limited references can be variables, parameters or returned types:
 
@@ -125,7 +126,8 @@ Overloading and limited References
 
 The `limited` mode can induce overloading on a subprogram parameter. When
 this happens, the compiler invariably prioritizes the profile with the limited
-parameter. For example:
+parameter. In other words, if the actual parameter is itself a limited reference,
+or a literal, it will be selecing a limited formal parameter. For example:
 
 ```Ada
    V1 : Integer := 1;
@@ -190,6 +192,9 @@ begin
 
 Replace on Limited Refences
 ---------------------------
+
+When applied to a limited reference, 'Replace is defined as having limited
+input parameters.
 
 Components
 ----------
