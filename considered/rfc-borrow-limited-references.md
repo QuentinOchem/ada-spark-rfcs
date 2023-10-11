@@ -188,6 +188,9 @@ begin
    V2 := V1; -- OK
 ```
 
+Replace on Limited Refences
+---------------------------
+
 Components
 ----------
 

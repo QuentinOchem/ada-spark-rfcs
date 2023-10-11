@@ -19,8 +19,7 @@ particular we introduce two fundamental concepts:
 
 - A new kind of variable, called a limited reference, which is a references to
   an object or a value that can't be referenced (or "owned" / "aliased")
-  referenced by others. This is similar to a C++ rvalue reference or a rust
-  variable.
+  by others. This is similar to a C++ rvalue reference or a rust variable.
   See [Limited References](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited-references.md)
 - An extension to limited types, which redefines assignment and parameter
   passing as being moved or borrow operations. This allows to implement in
@@ -57,7 +56,8 @@ begin
 
 Two requirements need to be met for this operation to
 be safe and correct:
-- the source reference moved must own its value
+- the source reference moved must own its value. That is to say, no other variable
+  references the same value.
 - the source reference cannot be referenced after the move operation
 
 In general, there is no provision in Ada to verify that either of these
@@ -95,6 +95,10 @@ attribute. Borrowing is always scoped, it starts on the initial introduction of
 the 'Borrow call up until the end of the scope of the reference receiving the borrow
 (which could be a variable, a parameter or a temporary value). Is is equivalent
 to doing a 'Move in one direction, then on the other at the end of said scope.
+However, contrary to a move operation, a borrow operation doesn't impose constraints
+on the source reference, as the value is given back at the end of the operation.
+So a borrow operation would not issue the warnings you get in a move.
+
 For example, in the context of a local constant:
 
 ```Ada
@@ -125,33 +129,7 @@ begin
    --  V is accessible again here
 ```
 
-Note that this syntax works for dynamic objects too - at compilation time, a
-straighforward implementation is to generate a temporary for the borrowed
-pointer in order to be able to restore it, so that:
-
-```Ada
-declare
-   V2 : constant Handle := X.Y.Z'Borrow;
-begin
-   X := new Some_Structure;
-end; -- X.Y.Z is released here
-```
-
-is equivalent to:
-
-```Ada
-declare
-   V2 : Handle;
-begin
-   -- tmp = X.Y.Z'Access;
-   V2 := X.Y.Z'Borrow;
-   -- X.Y.Z = null
-   X := new Some_Structure;
-   -- tmp.all = V2
-end; -- X.Y.Z is released here
-```
-
-Borrowed value needs to be locally scoped. The following is illegal:
+The received of a borrowed value needs to be locally scoped. The following is illegal:
 
 ```Ada
    G : Handle;
@@ -161,8 +139,6 @@ Borrowed value needs to be locally scoped. The following is illegal:
       G := V'Borrow; - compilation error, borrowing to a value outside of scope
    end P;
 ```
-Contrary to a move operation, a borrow operation doesn't impose constraints
-on the source reference, as the value is given back at the end of the operation.
 
 Clone and Alias
 ---------------
@@ -172,52 +148,17 @@ Two new operations are provided:
 - 'Alias, which is in principle providing a so-called "shallow" copy
 - 'Clone, which is in principle providing a so-called "deep" copy
 
-The meaning of shallow and deep copies / 'Alias and 'Clone depends on the limited
-types. For example, the semantic is the same for scalar types, but differ
-significantely for tagged types. See specific sections for more details.
+By default, these are only provided for non-limited types.
+- For all scalar types, 'Clone and 'Alias performs a copy
+- For all access types, 'Clone isn't provided, 'Alias performs a copy of the value.
+- For composite types:
+ - 'Clone is provided if all they components also provide a clone operation. The
+   resulting operation is a clone of all fields.
+ - 'Alias is provided if all they components also provide an alias operation. The
+   resulting operation is a clone of all fields.
 
-These operations are available for all Ada types with the exception of limited
-types.
-
-A limited type that allow 'Alias is introduced by the Alias (On|Off) aspect.
-A type that allows copies is introduced by the Clone aspect. The private
-view of a type may restrict the types of operations allowed. For example:
-
-```Ada
-package P is
-
-   type T1 is limited private;
-   type T2 is limited private with Alias => On;
-   type T3 is limited private with Alias => On;
-
-private
-
-   type T1 is limited null record with Alias => On, Clone => On; -- OK
-   type T2 is limited null record with Alias => On;  -- OK
-   type T3 is limited null record; -- compilation error, Alias is Off by default
-
-end P;
-```
-
-These can then be used as follows:
-
-```Ada
-package body P is
-
-   procedure Proc (V : T1) is
-      L : T1 := V'Clone;
-   begin
-      null;
-   end Proc;
-
-end P;
-```
-
-It is the responsibility of the type implemented to decide is an Alias is ok or
-not. For example, an alias to a linked list would not be ok unless specific
-reference counting mechanism is provided.
-
-Aliasing and Clone cannot be enabled at the object level.
+Further aspects of this proposal may allow to enable clone or alias operations
+on types that don't have such operation by default.
 
 Replace
 -------
@@ -231,9 +172,8 @@ value of the previous object in the same operation. For example:
    Src : A := new Integer;
    Dst : A;
 begin
-   Dst := Src'Replace (Src, null);
+   Dst := Src'Replace (Src, new Integer);
    --  warning, Src may not own its value
-   --  Src is null here
 ```
 
 It is legal to access the value of the previous object after the replace
