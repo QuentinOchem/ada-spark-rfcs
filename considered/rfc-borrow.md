@@ -24,7 +24,7 @@ particular we introduce two fundamental concepts:
 - An extension to limited types, which redefines assignment and parameter
   passing as being moved or borrow operations. This allows to implement in
   particular so called smart-pointers.
-  See [Limited Types](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited_types.md)
+  See [Limited Types](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-limited-types.md)
 
 Object Orientation is making a specific usage of move semantics, inspired by C++.
 See [Move Constructor](https://github.com/QuentinOchem/ada-spark-rfcs/blob/move_semantics/considered/rfc-borrow-move_constructor.md)
@@ -214,3 +214,9 @@ Unresolved questions
 
 Future possibilities
 ====================
+
+The checks provided in these proposals are relatively simple. For example,
+when a component of an object is moved, we consider the entire object move
+and would warn if a different component is moved. In a next step, we should
+develop syntax to defer the more complex analysis to SPARK, and allow to
+prove more complex situations.
