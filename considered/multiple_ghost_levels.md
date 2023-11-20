@@ -175,7 +175,7 @@ elements in its expressions that are marked as not checked for proof and run-tim
 check respectively. For example:
 
 ```Ada
-   V : Integer with Ghost (Runtime_Check => Never);
+   V : Integer with Ghost (Never_Runtime);
 
    pragma Assert (V = 0);
    --  Compiler error, the assertion is marked default and can be activated for
