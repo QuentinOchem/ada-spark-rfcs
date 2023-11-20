@@ -31,6 +31,9 @@ for the purpose of proof.
 Guide-level explanation
 =======================
 
+Multiple Ghost scopes
+---------------------
+
 A new pragma is introduced, ``Ghost_Scope``, which takes an identifier as
 parameter:
 
@@ -42,8 +45,38 @@ package Some_Package is
 end Some_Package;
 ```
 
+A new package is introduced to the Ada standard, Ada.Ghost, defined as follows:
+
+```Ada
+package Ada.Ghost is
+   pragma Ghost_Scope (Default);
+   pragma Ghost_Scope (Always_Runtime);
+   pragma Ghost_Scope (Never_Runtime);
+   pragma Ghost_Scope (Performance);
+   pragma Ghost_Scope (Safety);
+end Ada.Ghost;
+```
+
+The Default ghost scope is the one used in the absence of specific
+parametrization of assertions. Code marked "Always_Runtime" should always be
+executed under all compiler settings. Code marked "Never_Runtime" should never
+be executed under any compiler setting. Other scopes are provided as a way to
+standardize the most common execution modes.
+
+Ghost identifiers are scoped like regular variables. They can be prefixed by
+their containing package. They need to be declared at the library level.
+
+Ghost on Assertions
+-------------------
+
 Assertions can be associated with specific scopes using the Ada arrow
-assocations:
+assocations. This can be used in pragma Assert, Assume, Loop_Invariant, e.g.:
+
+```Ada
+   pragma Assert (Gold => X > 5);
+```
+
+or in aspects Pre, Post, Predicate, Invariant, e.g.:
 
 ```Ada
    procedure Sort (A : in out Some_Array)
@@ -53,34 +86,116 @@ assocations:
                         A (I) <= A (I-1)>));
 ```
 
-Ghost identifiers are scoped like regular variables. They can be prefixed by
-their containing package. They need to be declared at the library level.
-
-The pragma ``Assertion_Policy`` can be parametrized with ghost scopes:
+A given assertion can be provided for multiple ghost scopes, for example:
 
 ```Ada
-   pragma Assertion_Policy (Gold => Check, Platinium => Disable);
+   pragma Assert ([Gold, Platinium] => X > 5);
 ```
 
-A new package is introduced to the Ada standard, Ada.Ghost, defined as follows:
+Ghost on Entities
+-----------------
+
+Entities can be associated with specific scopes of ghost code. When that's the
+case, the scope is given as a parameter of the Ghost argument. A given entity
+can be associated with more than one ghost scope. For example:
+
+```Ada
+   V : Integer with Ghost (Platinium);
+
+   procedure Lemma with Ghost (Never_Runtime);
+```
+
+Activation and Consistency of Ghost code
+----------------------------------------
+
+Ghost scopes can be controlled at declaration time through the Runtime_Check
+and Proof_Check values:
+
+- Runtime_Check => Always, the check is always enabled at run-time. This can't
+  be overriden by other pragmas or compiler configurations
+- Runtime_Check => Never, the check is never enabled at run-time. This can't
+  be overriden by other pragmas or compiler configurations
+- Runtime_Check => On, the check is enabled at runtime by default, can be
+  changed.
+- Runtime_Check => On, the check is not enabled at runtime by default, can be
+  changed. This is the default mode for all ghost code.
+
+- Proof_Check => Always, the check is always checked by the prover. This can't
+  be overriden by other pragmas or compiler configurations
+- Proof_Check => Never, the check is never checked by the prover. This can't
+  be overriden by other pragmas or compiler configurations
+- Proof_Check => On, the check is checked by the prover by default, can be
+  changed. This is the default mode for all ghost code.
+- Proof_Check => On, the check is not checked by the prover by default, can be
+  changed. This is the default mode for all ghost code.
+
+- Proof_Assume => Always, the check is always assumed true by the prover.
+  This can't be overriden by other pragmas or compiler configurations
+- Proof_Assume => Never, the check is never assumed true by the prover.
+  This can't be overriden by other pragmas or compiler configurations
+- Proof_Assume => On, the check is assumed by the prover by default, can be
+  changed. This is the default mode for all ghost code.
+- Proof_Assume => On, the check is not assumed by the prover by default, can be
+  changed. This is the default mode for all ghost code.
+
+For example:
 
 ```Ada
 package Ada.Ghost is
-
-   pragma Ghost_Scope (Default);
-   pragma Ghost_Scope (Always_Runtime);
-   pragma Ghost_Scope (Never_Runtime);
-   pragma Ghost_Scope (Performance);
-   pragma Ghost_Scope (Safety);
-
+   pragma Ghost_Scope (Default, Runtime_Check => Off);
+   pragma Ghost_Scope (Always_Runtime, Runtime_Check => Always);
+   pragma Ghost_Scope (Never_Runtime, Runtime_Check => Never);
+   pragma Ghost_Scope (Performance, Runtime_Check => Off);
+   pragma Ghost_Scope (Safety, Runtime_Check => On);
 end Ada.Ghost;
 ```
 
-The Default ghost scope is the one used in the absence of specific
-parametrization of assertions. Code marked "Always_Runtime" should always be
-executed under all compiler settings. Code marked "Never_Runtime" should never
-be executed under any compiler setting. Other scopes are provided as a way to
-standardize the most common execution modes.
+Policy can also be changed for attributes that are not marked Always or Never,
+through the use of the pragma Ghost_Policy. A policy is active until the end of
+the scope or until another Ghost_Policy pragma is found. For example:
+
+```Ada
+
+   pragma Ghost_Policy (Default, Runtime_Check => On);
+
+   -- Activates run-time checks
+
+   pragma Ghost_Policy (Default, Runtime_Check => Off);
+
+   -- Deactives run-time checks
+```
+
+Turning On and Off Proof_Check may allow to run proof in different context,
+for example, local users may be required to only activate certain proof while
+a CI/CD integration system may need to activate more.
+
+Ghost checks (that is, expressions within an assertion) must be consistent with
+regards to their Runtime_Check and Proof_Check properties. The compiler is responsible for identifying when an assertion that needs to be proven and executed has
+elements in its expressions that are marked as not checked for proof and run-time
+check respectively. For example:
+
+```Ada
+   V : Integer with Ghost (Runtime_Check => Never);
+
+   pragma Assert (V = 0);
+   --  Compiler error, the assertion is marked default and can be activated for
+   --  run-time checks while V cannot.
+```
+
+Within a ghost entity however - e.g. a lemma - inconsistenc
+
+```Ada
+   procedure L1 with Ghost (Never_Runtime);
+
+   procedure L2 with Ghost (Always_Runtime);
+   -- L2 will always be called at runtime
+
+   procedure L2 with Ghost (Always_Runtime) is
+   begin
+      L1;
+      -- OK - even if L2 is always called at run-time, L1 will not.
+   end;
+```
 
 Reference-level explanation
 ===========================
