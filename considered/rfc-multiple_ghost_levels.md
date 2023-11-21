@@ -73,34 +73,33 @@ Assertions can be associated with specific scopes using the Ada arrow
 assocations. This can be used in pragma Assert, Assume, Loop_Invariant, e.g.:
 
 ```Ada
-   pragma Assert (Gold => X > 5);
-   -- alternatively pragma Assert (X > 5, Gold);
+pragma Assert (Gold => X > 5);
 ```
 
 or in aspects Pre, Post, Predicate, Invariant, e.g.:
 
 ```Ada
-   procedure Sort (A : in out Some_Array)
-      with Post =>
-         (Gold      => (if A'Length > 0 then A (A'First) <= A (A'Last)),
-          Platinium => (for all I in A'First .. A'Last -1 =>
-                        A (I) <= A (I-1)));
+procedure Sort (A : in out Some_Array)
+   with Post =>
+      (Gold      => (if A'Length > 0 then A (A'First) <= A (A'Last)),
+       Platinium => (for all I in A'First .. A'Last -1 =>
+                     A (I) <= A (I-1)));
 ```
 
 ```Ada
-   procedure Sort (A : in out Some_Array)
-      with Contract_Case =>
-         (Gold      =>
-             (Something      => (if A'Length > 0 then A (A'First) <= A (A'Last))
-              Something_Else => Bla),
-          Platinium => (for all I in A'First .. A'Last -1 =>
-                        A (I) <= A (I-1)));
+procedure Sort (A : in out Some_Array)
+   with Contract_Case =>
+      (Gold      =>
+          (Something      => (if A'Length > 0 then A (A'First) <= A (A'Last))
+           Something_Else => Bla),
+       Platinium => (for all I in A'First .. A'Last -1 =>
+                     A (I) <= A (I-1)));
 ```
 
 A given assertion can be provided for multiple ghost scopes, for example:
 
 ```Ada
-   pragma Assert ([Gold, Platinium] => X > 5);
+pragma Assert ([Gold, Platinium] => X > 5);
 ```
 
 Ghost on Entities
@@ -111,9 +110,9 @@ case, the scope is given as a parameter of the Ghost argument. A given entity
 can be associated with more than one ghost scope. For example:
 
 ```Ada
-   V : Integer with Ghost (Platinium);
+V : Integer with Ghost (Platinium);
 
-   procedure Lemma with Ghost ([Never_Runtime, Platinium]);
+procedure Lemma with Ghost ([Never_Runtime, Platinium]);
 ```
 
 Dependencies between Ghost code
@@ -125,7 +124,7 @@ unidirectional. In the current SPARK behavior, the default ghost code is
 already expressed as being able to depend on runtime code:
 
 ```Ada
-   pragma Ghost_Scope (Default, Depends => [Always_Runtime]);
+pragma Ghost_Scope (Default, Depends => [Always_Runtime]);
 ```
 
 This effectively prevents run-time code to depend on ghost code (indeed, ghost
@@ -136,19 +135,21 @@ code. In addition, it may also depend on Default ghost code. The reverse is
 not true as Default ghost may be executed but not Never runtime:
 
 ```Ada
-   pragma Ghost_Scope (Never_Runtime, Depends => [Default, Always_Runtime]);
+pragma Ghost_Scope (Never_Runtime, Depends => [Default, Always_Runtime]);
 ```
 
 Note that dependencies are transitive, so the above is actually written:
 
 ```Ada
-   pragma Ghost_Scope (Never_Runtime, Depends => [Default]);
+pragma Ghost_Scope (Never_Runtime, Depends => [Default]);
 ```
 
 Always_Runtime ghost code can't depend on any other kind of ghost code, which
 can be expressed by an empty value:
 
+```Ada
 pragma Ghost_Scope (Always_Runtime, Depends => []);
+```Ada
 
 Users would also be able to decribe their own dependencies. A typical use
 case for someone that goes through the Silver / Gold / Platinium nomenclatura,
@@ -156,13 +157,13 @@ and wishes to differenciates code that can be activated at runtime from
 code that can't would be to do as follows:
 
 ```Ada
-   pragma Ghost_Scope (Silver,   Depends => [Default]);
-   pragma Ghost_Scope (Gold,     Depends => [Silver]);
-   pragma Ghost_Scope (Platinum, Depends => [Gold]);
+pragma Ghost_Scope (Silver,   Depends => [Default]);
+pragma Ghost_Scope (Gold,     Depends => [Silver]);
+pragma Ghost_Scope (Platinum, Depends => [Gold]);
 
-   pragma Ghost_Scope (Silver_No_Runtime,   Depends => [Silver, Never_Runtime]);
-   pragma Ghost_Scope (Gold_No_Runtime,     Depends => [Silver_No_Runtime, Gold]);
-   pragma Ghost_Scope (Platinum_No_Runtime, Depends => [Gold_No_Runtime, Platinum]);
+pragma Ghost_Scope (Silver_No_Runtime,   Depends => [Silver, Never_Runtime]);
+pragma Ghost_Scope (Gold_No_Runtime,     Depends => [Silver_No_Runtime, Gold]);
+pragma Ghost_Scope (Platinum_No_Runtime, Depends => [Gold_No_Runtime, Platinum]);
 ```
 
 Activating / Deactivating Ghost code
@@ -172,7 +173,7 @@ Specific ghost code can be activated / deactivated through the Assertion_Policy
 pragma:
 
 ```Ada
-   pragma Assertion_Policy (Gold => Check, Platinium => Disable);
+pragma Assertion_Policy (Gold => Check, Platinium => Disable);
 ```
 
 Compiler and prover options may also have an impact on the default policies.
