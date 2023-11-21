@@ -74,6 +74,7 @@ assocations. This can be used in pragma Assert, Assume, Loop_Invariant, e.g.:
 
 ```Ada
    pragma Assert (Gold => X > 5);
+   -- alternatively pragma Assert (X > 5, Gold);
 ```
 
 or in aspects Pre, Post, Predicate, Invariant, e.g.:
@@ -83,7 +84,17 @@ or in aspects Pre, Post, Predicate, Invariant, e.g.:
       with Post =>
          (Gold      => (if A'Length > 0 then A (A'First) <= A (A'Last)),
           Platinium => (for all I in A'First .. A'Last -1 =>
-                        A (I) <= A (I-1)>));
+                        A (I) <= A (I-1)));
+```
+
+```Ada
+   procedure Sort (A : in out Some_Array)
+      with Contract_Case =>
+         (Gold      =>
+             (Something      => (if A'Length > 0 then A (A'First) <= A (A'Last))
+              Something_Else => Bla),
+          Platinium => (for all I in A'First .. A'Last -1 =>
+                        A (I) <= A (I-1)));
 ```
 
 A given assertion can be provided for multiple ghost scopes, for example:
@@ -102,100 +113,78 @@ can be associated with more than one ghost scope. For example:
 ```Ada
    V : Integer with Ghost (Platinium);
 
-   procedure Lemma with Ghost (Never_Runtime);
+   procedure Lemma with Ghost ([Never_Runtime, Platinium]);
 ```
 
-Activation and Consistency of Ghost code
-----------------------------------------
+Dependencies between Ghost code
+-------------------------------
 
-Ghost scopes can be controlled at declaration time through the Runtime_Check
-and Proof_Check values:
-
-- Runtime_Check => Always, the check is always enabled at run-time. This can't
-  be overriden by other pragmas or compiler configurations
-- Runtime_Check => Never, the check is never enabled at run-time. This can't
-  be overriden by other pragmas or compiler configurations
-- Runtime_Check => On, the check is enabled at runtime by default, can be
-  changed.
-- Runtime_Check => On, the check is not enabled at runtime by default, can be
-  changed. This is the default mode for all ghost code.
-
-- Proof_Check => Always, the check is always checked by the prover. This can't
-  be overriden by other pragmas or compiler configurations
-- Proof_Check => Never, the check is never checked by the prover. This can't
-  be overriden by other pragmas or compiler configurations
-- Proof_Check => On, the check is checked by the prover by default, can be
-  changed. This is the default mode for all ghost code.
-- Proof_Check => On, the check is not checked by the prover by default, can be
-  changed. This is the default mode for all ghost code.
-
-- Proof_Assume => Always, the check is always assumed true by the prover.
-  This can't be overriden by other pragmas or compiler configurations
-- Proof_Assume => Never, the check is never assumed true by the prover.
-  This can't be overriden by other pragmas or compiler configurations
-- Proof_Assume => On, the check is assumed by the prover by default, can be
-  changed. This is the default mode for all ghost code.
-- Proof_Assume => On, the check is not assumed by the prover by default, can be
-  changed. This is the default mode for all ghost code.
-
-For example:
+When declaring ghost scopes, you can describe dependencies, in other word, what
+data can flow from one kind of ghost to the other. This dependency is
+unidirectional. In the current SPARK behavior, the default ghost code is
+already expressed as being able to depend on runtime code:
 
 ```Ada
-package Ada.Ghost is
-   pragma Ghost_Scope (Default, Runtime_Check => Off);
-   pragma Ghost_Scope (Always_Runtime, Runtime_Check => Always);
-   pragma Ghost_Scope (Never_Runtime, Runtime_Check => Never);
-   pragma Ghost_Scope (Performance, Runtime_Check => Off);
-   pragma Ghost_Scope (Safety, Runtime_Check => On);
-end Ada.Ghost;
+   pragma Ghost_Scope (Default, Depends => [Always_Runtime]);
 ```
 
-Policy can also be changed for attributes that are not marked Always or Never,
-through the use of the pragma Ghost_Policy. A policy is active until the end of
-the scope or until another Ghost_Policy pragma is found. For example:
+This effectively prevents run-time code to depend on ghost code (indeed, ghost
+code may not be compiled).
+
+Ghost code that can never be executed at run-time may also depend and runtime
+code. In addition, it may also depend on Default ghost code. The reverse is
+not true as Default ghost may be executed but not Never runtime:
 
 ```Ada
-
-   pragma Ghost_Policy (Default, Runtime_Check => On);
-
-   -- Activates run-time checks
-
-   pragma Ghost_Policy (Default, Runtime_Check => Off);
-
-   -- Deactives run-time checks
+   pragma Ghost_Scope (Never_Runtime, Depends => [Default, Always_Runtime]);
 ```
 
-Turning On and Off Proof_Check may allow to run proof in different context,
-for example, local users may be required to only activate certain proof while
-a CI/CD integration system may need to activate more.
-
-Ghost checks (that is, expressions within an assertion) must be consistent with
-regards to their Runtime_Check and Proof_Check properties. The compiler is responsible for identifying when an assertion that needs to be proven and executed has
-elements in its expressions that are marked as not checked for proof and run-time
-check respectively. For example:
+Note that dependencies are transitive, so the above is actually written:
 
 ```Ada
-   V : Integer with Ghost (Never_Runtime);
-
-   pragma Assert (V = 0);
-   --  Compiler error, the assertion is marked default and can be activated for
-   --  run-time checks while V cannot.
+   pragma Ghost_Scope (Never_Runtime, Depends => [Default]);
 ```
 
-Within a ghost entity however - e.g. a lemma - inconsistenc
+Always_Runtime ghost code can't depend on any other kind of ghost code, which
+can be expressed by an empty value:
+
+pragma Ghost_Scope (Always_Runtime, Depends => []);
+
+Users would also be able to decribe their own dependencies. A typical use
+case for someone that goes through the Silver / Gold / Platinium nomenclatura,
+and wishes to differenciates code that can be activated at runtime from
+code that can't would be to do as follows:
 
 ```Ada
-   procedure L1 with Ghost (Never_Runtime);
+   pragma Ghost_Scope (Silver,   Depends => [Default]);
+   pragma Ghost_Scope (Gold,     Depends => [Silver]);
+   pragma Ghost_Scope (Platinum, Depends => [Gold]);
 
-   procedure L2 with Ghost (Always_Runtime);
-   -- L2 will always be called at runtime
-
-   procedure L2 with Ghost (Always_Runtime) is
-   begin
-      L1;
-      -- OK - even if L2 is always called at run-time, L1 will not.
-   end;
+   pragma Ghost_Scope (Silver_No_Runtime,   Depends => [Silver, Never_Runtime]);
+   pragma Ghost_Scope (Gold_No_Runtime,     Depends => [Silver_No_Runtime, Gold]);
+   pragma Ghost_Scope (Platinum_No_Runtime, Depends => [Gold_No_Runtime, Platinum]);
 ```
+
+Activating / Deactivating Ghost code
+------------------------------------
+
+Specific ghost code can be activated / deactivated through the Assertion_Policy
+pragma:
+
+```Ada
+   pragma Assertion_Policy (Gold => Check, Platinium => Disable);
+```
+
+Compiler and prover options may also have an impact on the default policies.
+
+Note that activating or deactivating ghost scopes have an impact on dependent
+ghost scopes as follows:
+- Deactivating one ghost scope will deactivate all ghost scopes that are
+  allowed to depend on it.
+- Activating one ghost scope will activate all ghost scopes that it depends on.
+
+Activation / deactivation can be done either from the perspective of run-time
+checks or proofs.
 
 Reference-level explanation
 ===========================
