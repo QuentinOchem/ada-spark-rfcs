@@ -149,7 +149,7 @@ can be expressed by an empty value:
 
 ```Ada
 pragma Ghost_Scope (Always_Runtime, Depends => []);
-```Ada
+```
 
 Users would also be able to decribe their own dependencies. A typical use
 case for someone that goes through the Silver / Gold / Platinium nomenclatura,
