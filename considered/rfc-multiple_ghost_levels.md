@@ -250,22 +250,3 @@ This could help model various execution modes in a high integrity application,
 allowing to implement degraded safety mode when needed. Knowning wether this
 kind of advanced capabilty is valuable would require some industrial feedback.
 
-Another idea that came up is to define relationships between scopes. This could
-be used when using them in ghost code, e.g.:
-
-```Ada
-   procedure Sort (A : in out Some_Array)
-      with Post =>
-         (Gold               => (if A'Length > 0 then A (A'First) <= A (A'Last)),
-          Gold or Platinium => (for all I in A'First .. A'Last -1 =>
-                                 A (I) <= A (I-1)>));
-```
-
-Or even when defining these scopes:
-
-```Ada
-   pragma Ghost_Scope (Platinium, Implies => Gold and Silver);
-   --  Platinium always activates Gold and Silver
-```
-
-Again, it's not clear yet if the extra complexity bring sufficient value.
