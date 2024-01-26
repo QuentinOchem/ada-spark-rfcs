@@ -35,7 +35,7 @@ Multiple Ghost scopes
 ---------------------
 
 A new pragma is introduced, ``Ghost_Scope``, which takes an identifier as
-parameter:
+parameter. It can be used to defined custom Ghost levels, for example:
 
 ```Ada
 package Some_Package is
@@ -45,23 +45,24 @@ package Some_Package is
 end Some_Package;
 ```
 
-A new package is introduced to the Ada standard, Ada.Ghost, defined as follows:
+New identifiers are introduced in the package Standard, defined as follows:
 
 ```Ada
-package Ada.Ghost is
+package Standard is
+   [...]
+
    pragma Ghost_Scope (Default);
    pragma Ghost_Scope (Always_Runtime);
    pragma Ghost_Scope (Never_Runtime);
-   pragma Ghost_Scope (Performance);
-   pragma Ghost_Scope (Safety);
+
+   [...]
 end Ada.Ghost;
 ```
 
 The Default ghost scope is the one used in the absence of specific
 parametrization of assertions. Code marked "Always_Runtime" should always be
 executed under all compiler settings. Code marked "Never_Runtime" should never
-be executed under any compiler setting. Other scopes are provided as a way to
-standardize the most common execution modes.
+be executed under any compiler setting.
 
 Ghost identifiers are scoped like regular variables. They can be prefixed by
 their containing package. They need to be declared at the library level.
@@ -149,6 +150,26 @@ can be expressed by an empty value:
 
 ```Ada
 pragma Ghost_Scope (Always_Runtime, Depends => []);
+```
+
+The default ghost levels introduced earlier are actually declared like this:
+
+```Ada
+package Standard is
+   [...]
+
+   --  Run time code may not depend on any category of ghost code
+   pragma Ghost_Scope (Always_Runtime, Depends => []);
+
+   --  Default ghost code may depend on run-time code (but not ghost code that
+   --  can't be compiled)
+   pragma Ghost_Scope (Default, Depends => [Always_Runtime]);
+
+   --  Never_Runtime ghost code may depend on default ghost code
+   pragma Ghost_Scope (Never_Runtime, Depends => [Default]);
+
+   [...]
+end Standard;
 ```
 
 Users would also be able to decribe their own dependencies. A typical use
