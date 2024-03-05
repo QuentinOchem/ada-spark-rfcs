@@ -8,11 +8,11 @@ Summary
 
 This proposal introduces two concepts:
 
-- A new pragma Ghost_Scope which allows to name a specific ghost code
-  classification.
-- An extension for the syntax of all ghost code (preconditions,
+- A new pragma Assertion_Level which allows to name a specific assertion level
+  and its dependencies.
+- An extension for the syntax of all assertions (preconditions,
   postconditions, assertions...) that allows to designate ghost code expression
-  as being related to a specific classification.
+  as being related to a specific level.
 
 Tools such as compilers, provers or static analysers will be able to be
 configured to enable or not certain ghost code classes.
@@ -21,9 +21,9 @@ Motivation
 ==========
 
 When using programming by contract extensively, it is often necessary to
-classify ghost code for different purposes, and have this classification
+classify assertion for different purposes, and have this classification
 impacting run-time code generation. A very common case is to differenciate
-ghost code that can be activated at run-time and generate tests from ghost
+assertions that can be activated at run-time and generate tests from assertions
 code that cannot be possibly compiled (because it's too slow, needs too much
 memory or references entities that have no body) but is nonetheless useful
 for the purpose of proof.
@@ -34,16 +34,19 @@ Guide-level explanation
 Multiple Ghost scopes
 ---------------------
 
-A new pragma is introduced, ``Ghost_Scope``, which takes an identifier as
-parameter. It can be used to defined custom Ghost levels, for example:
+A new pragma is introduced, ``Assertion_Level``, which takes an identifier as
+parameter. It can be used to defined custom assertion levels, for example:
 
 ```Ada
 package Some_Package is
-   pragma Ghost_Scope (Silver);
-   pragma Ghost_Scope (Gold);
-   pragma Ghost_Scope (Platinium);
+   pragma Assertion_Level (Silver);
+   pragma Assertion_Level (Gold);
+   pragma Assertion_Level (Platinium);
 end Some_Package;
 ```
+
+The pragma `Assertion_Level` needs to be used at library level in a package
+specification.
 
 New identifiers are introduced in the package Standard, defined as follows:
 
@@ -51,26 +54,26 @@ New identifiers are introduced in the package Standard, defined as follows:
 package Standard is
    [...]
 
-   pragma Ghost_Scope (Default);
-   pragma Ghost_Scope (Always_Runtime);
-   pragma Ghost_Scope (Never_Runtime);
+   pragma Assertion_Level (Default);
+   pragma Assertion_Level (Always_Runtime);
+   pragma Assertion_Level (Never_Runtime);
 
    [...]
 end Ada.Ghost;
 ```
 
-The Default ghost scope is the one used in the absence of specific
+The Default assertion level is the one used in the absence of specific
 parametrization of assertions. Code marked "Always_Runtime" should always be
 executed under all compiler settings. Code marked "Never_Runtime" should never
 be executed under any compiler setting.
 
-Ghost identifiers are scoped like regular variables. They can be prefixed by
+Assertion levels are scoped like regular variables. They can be prefixed by
 their containing package. They need to be declared at the library level.
 
-Ghost on Assertions
--------------------
+Levels on Assertions
+--------------------
 
-Assertions can be associated with specific scopes using the Ada arrow
+Assertions can be associated with specific level using the Ada arrow
 assocations. This can be used in pragma Assert, Assume, Loop_Invariant, e.g.:
 
 ```Ada
@@ -97,116 +100,95 @@ procedure Sort (A : in out Some_Array)
                      A (I) <= A (I-1)));
 ```
 
-A given assertion can be provided for multiple ghost scopes, for example:
+A given assertion can be provided for multiple assertion levels, for example:
 
 ```Ada
 pragma Assert ([Gold, Platinium] => X > 5);
 ```
 
-Ghost on Entities
------------------
+Levels on Entities
+------------------
 
-Entities can be associated with specific scopes of ghost code. When that's the
-case, the scope is given as a parameter of the Ghost argument. A given entity
+Entities can be associated with specific level of assertions. When that's the
+case, the level is given as a parameter of the Ghost argument. A given entity
 can be associated with more than one ghost scope. For example:
 
 ```Ada
-V : Integer with Ghost (Platinium);
+V : Integer with Ghost => Platinium;
 
-procedure Lemma with Ghost ([Never_Runtime, Platinium]);
+procedure Lemma with Ghost => [Never_Runtime, Platinium];
 ```
 
-Dependencies between Ghost code
--------------------------------
+Dependencies between assertion levels
+-------------------------------------
 
-When declaring ghost scopes, you can describe dependencies, in other word, what
-data can flow from one kind of ghost to the other. This dependency is
-unidirectional. In the current SPARK behavior, the default ghost code is
-already expressed as being able to depend on runtime code:
+When declaring assertion levels, you can describe dependencies, in other word,
+what data can flow from one level of assertion to the other. This dependency is
+unidirectional. For example:
 
 ```Ada
-pragma Ghost_Scope (Default, Depends => [Always_Runtime]);
+pragma Assertion_Level (Silver);
+pragma Assertion_Level (Gold, Depends => [Silver]);
 ```
 
-This effectively prevents run-time code to depend on ghost code (indeed, ghost
-code may not be compiled).
+The above means that Gold assertions may depend on Silver, but the reverse is
+not true.
 
-Ghost code that can never be executed at run-time may also depend and runtime
-code. In addition, it may also depend on Default ghost code. The reverse is
-not true as Default ghost may be executed but not Never runtime:
+Dependencies are transitive, e.g. in:
 
 ```Ada
-pragma Ghost_Scope (Never_Runtime, Depends => [Default, Always_Runtime]);
+pragma Assertion_Level (Silver);
+pragma Assertion_Level (Gold, Depends => [Silver]);
+pragma Assertion_Level (Platinum, Depends => [Gold]);
 ```
 
-Note that dependencies are transitive, so the above is actually written:
+is equivalent to:
 
 ```Ada
-pragma Ghost_Scope (Never_Runtime, Depends => [Default]);
+pragma Assertion_Level (Silver);
+pragma Assertion_Level (Gold, Depends => [Silver]);
+pragma Assertion_Level (Platinum, Depends => [Silver, Gold]);
 ```
 
-Always_Runtime ghost code can't depend on any other kind of ghost code, which
-can be expressed by an empty value:
+By default, all assertions levels depends on `Always_Runtime` level, and
+`Never_Runtime` level depends on all assertions levels that doesn't
+explicitely or transitively depend on it (there are no circularities). The
+following is valid:
 
 ```Ada
-pragma Ghost_Scope (Always_Runtime, Depends => []);
+pragma Assertion_Level (Silver);
+pragma Assertion_Level (Gold, Depends => [Silver]);
+pragma Assertion_Level (Platinum, Depends => [Silver, Gold]);
+
+X1 : Integer with Ghost => Platinum;
+X2 : Integer := X1 with Ghost => Never_Runtime;
 ```
 
-The default ghost levels introduced earlier are actually declared like this:
+User can create ghost levels that can never be compiled by introducing a
+dependency on `Never_Runtime`:
 
 ```Ada
-package Standard is
-   [...]
-
-   --  Run time code may not depend on any category of ghost code
-   pragma Ghost_Scope (Always_Runtime, Depends => []);
-
-   --  Default ghost code may depend on run-time code (but not ghost code that
-   --  can't be compiled)
-   pragma Ghost_Scope (Default, Depends => [Always_Runtime]);
-
-   --  Never_Runtime ghost code may depend on default ghost code
-   pragma Ghost_Scope (Never_Runtime, Depends => [Default]);
-
-   [...]
-end Standard;
+pragma Assertion_Level (Silver_No_Runtime, Depends => [Never_Runtime]);
 ```
 
-Users would also be able to decribe their own dependencies. A typical use
-case for someone that goes through the Silver / Gold / Platinium nomenclatura,
-and wishes to differenciates code that can be activated at runtime from
-code that can't would be to do as follows:
-
-```Ada
-pragma Ghost_Scope (Silver,   Depends => [Default]);
-pragma Ghost_Scope (Gold,     Depends => [Silver]);
-pragma Ghost_Scope (Platinum, Depends => [Gold]);
-
-pragma Ghost_Scope (Silver_No_Runtime,   Depends => [Silver, Never_Runtime]);
-pragma Ghost_Scope (Gold_No_Runtime,     Depends => [Silver_No_Runtime, Gold]);
-pragma Ghost_Scope (Platinum_No_Runtime, Depends => [Gold_No_Runtime, Platinum]);
-```
-
-Activating / Deactivating Ghost code
+Activating / Deactivating Assertions
 ------------------------------------
 
-Specific ghost code can be activated / deactivated through the Assertion_Policy
-pragma:
+Specific assertions code can be activated / deactivated through an extension of
+the Assertion_Policy pragma:
 
 ```Ada
-pragma Assertion_Policy (Gold => Check, Platinium => Disable);
+pragma Assertion_Policy (Gold => Check, Platinium => Ignore);
 ```
 
 Compiler and prover options may also have an impact on the default policies.
 
 Note that activating or deactivating ghost scopes have an impact on dependent
 ghost scopes as follows:
-- Deactivating one ghost scope will deactivate all ghost scopes that are
+- Deactivating one assertion level will deactivate all assertion levels that are
   allowed to depend on it.
-- Activating one ghost scope will activate all ghost scopes that it depends on.
-
-Activation / deactivation can be done either from the perspective of run-time
-checks or proofs.
+- Activating one assertion level will activate all ghost scopes that it depends
+  on.
 
 Reference-level explanation
 ===========================
