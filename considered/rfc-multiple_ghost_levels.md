@@ -11,11 +11,11 @@ This proposal introduces two concepts:
 - A new pragma Assertion_Level which allows to name a specific assertion level
   and its dependencies.
 - An extension for the syntax of all assertions (preconditions,
-  postconditions, assertions...) that allows to designate ghost code expression
+  postconditions, assertions...) that allows to designate assertions
   as being related to a specific level.
 
 Tools such as compilers, provers or static analysers will be able to be
-configured to enable or not certain ghost code classes.
+configured to enable or not certain assertion levels.
 
 Motivation
 ==========
@@ -55,16 +55,16 @@ package Standard is
    [...]
 
    pragma Assertion_Level (Default);
-   pragma Assertion_Level (Always_Runtime);
-   pragma Assertion_Level (Never_Runtime);
+   pragma Assertion_Level (Runtime);
+   pragma Assertion_Level (Static);
 
    [...]
 end Ada.Ghost;
 ```
 
 The Default assertion level is the one used in the absence of specific
-parametrization of assertions. Code marked "Always_Runtime" should always be
-executed under all compiler settings. Code marked "Never_Runtime" should never
+parametrization of assertions. Code marked "Runtime" should always be
+executed under all compiler settings. Code marked "Static" should never
 be executed under any compiler setting.
 
 Assertion levels are scoped like regular variables. They can be prefixed by
@@ -116,7 +116,7 @@ can be associated with more than one ghost scope. For example:
 ```Ada
 V : Integer with Ghost => Platinium;
 
-procedure Lemma with Ghost => [Never_Runtime, Platinium];
+procedure Lemma with Ghost => [Static, Platinium];
 ```
 
 Dependencies between assertion levels
@@ -150,8 +150,8 @@ pragma Assertion_Level (Gold, Depends => [Silver]);
 pragma Assertion_Level (Platinum, Depends => [Silver, Gold]);
 ```
 
-By default, all assertions levels depends on `Always_Runtime` level, and
-`Never_Runtime` level depends on all assertions levels that doesn't
+By default, all assertions levels depends on `Runtime` level, and
+`Static` level depends on all assertions levels that doesn't
 explicitely or transitively depend on it (there are no circularities). The
 following is valid:
 
@@ -161,14 +161,14 @@ pragma Assertion_Level (Gold, Depends => [Silver]);
 pragma Assertion_Level (Platinum, Depends => [Silver, Gold]);
 
 X1 : Integer with Ghost => Platinum;
-X2 : Integer := X1 with Ghost => Never_Runtime;
+X2 : Integer := X1 with Ghost => Static;
 ```
 
 User can create ghost levels that can never be compiled by introducing a
-dependency on `Never_Runtime`:
+dependency on `Static`:
 
 ```Ada
-pragma Assertion_Level (Silver_No_Runtime, Depends => [Never_Runtime]);
+pragma Assertion_Level (Silver_Static, Depends => [Static]);
 ```
 
 Activating / Deactivating Assertions
@@ -181,9 +181,9 @@ the Assertion_Policy pragma:
 pragma Assertion_Policy (Gold => Check, Platinium => Ignore);
 ```
 
-Compiler and prover options may also have an impact on the default policies.
+Compiler options may also have an impact on the default policies.
 
-Note that activating or deactivating ghost scopes have an impact on dependent
+Note that activating or deactivating assertion levels have an impact on dependent
 ghost scopes as follows:
 - Deactivating one assertion level will deactivate all assertion levels that are
   allowed to depend on it.
