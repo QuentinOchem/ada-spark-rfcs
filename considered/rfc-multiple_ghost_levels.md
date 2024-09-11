@@ -8,11 +8,13 @@ Summary
 
 This proposal introduces two concepts:
 
-- A new pragma Assertion_Level which allows to name a specific assertion level
+- A new pragma ``Assertion_Level`` which allows to name a specific assertion level
   and its dependencies.
 - An extension for the syntax of all assertions (preconditions,
-  postconditions, assertions...) that allows to designate assertions
+  postconditions, pragma ``Assert``...) that allows to designate assertions
   as being related to a specific level.
+- An extension of the ``Ghost`` aspect/pragma to associate the associated
+  ghost entity with a specific level.
 
 Tools such as compilers, provers or static analysers will be able to be
 configured to enable or not certain assertion levels.
@@ -22,10 +24,10 @@ Motivation
 
 When using programming by contract extensively, it is often necessary to
 classify assertion for different purposes, and have this classification
-impacting run-time code generation. A very common case is to differenciate
-assertions that can be activated at run-time and generate tests from assertions
+impact run-time code generation. A very common case is to differenciate
+assertions that can be activated at run-time, generate tests from assertions
 code that cannot be possibly compiled (because it's too slow, needs too much
-memory or references entities that have no body) but is nonetheless useful
+memory or references entities that have no body), or use assertions
 for the purpose of proof.
 
 Guide-level explanation
@@ -41,7 +43,7 @@ parameter. It can be used to defined custom assertion levels, for example:
 package Some_Package is
    pragma Assertion_Level (Silver);
    pragma Assertion_Level (Gold);
-   pragma Assertion_Level (Platinium);
+   pragma Assertion_Level (Platinum);
 end Some_Package;
 ```
 
@@ -85,25 +87,26 @@ or in aspects Pre, Post, Predicate, Invariant, e.g.:
 ```Ada
 procedure Sort (A : in out Some_Array)
    with Post =>
-      (Gold      => (if A'Length > 0 then A (A'First) <= A (A'Last)),
-       Platinium => (for all I in A'First .. A'Last -1 =>
+      (Gold     => (if A'Length > 0 then A (A'First) <= A (A'Last)),
+       Platinum => (for all I in A'First .. A'Last -1 =>
                      A (I) <= A (I-1)));
 ```
 
 ```Ada
 procedure Sort (A : in out Some_Array)
-   with Contract_Case =>
-      (Gold      =>
+   with Contract_Cases =>
+      (Gold     =>
           (Something      => (if A'Length > 0 then A (A'First) <= A (A'Last))
            Something_Else => Bla),
-       Platinium => (for all I in A'First .. A'Last -1 =>
-                     A (I) <= A (I-1)));
+       Platinum =>
+          (others => (for all I in A'First .. A'Last -1 =>
+                       A (I) <= A (I-1))));
 ```
 
 A given assertion can be provided for multiple assertion levels, for example:
 
 ```Ada
-pragma Assert ([Gold, Platinium] => X > 5);
+pragma Assert ([Gold, Platinum] => X > 5);
 ```
 
 Levels on Entities
@@ -114,9 +117,9 @@ case, the level is given as a parameter of the Ghost argument. A given entity
 can be associated with more than one ghost scope. For example:
 
 ```Ada
-V : Integer with Ghost => Platinium;
+V : Integer with Ghost => Platinum;
 
-procedure Lemma with Ghost => [Static, Platinium];
+procedure Lemma with Ghost => [Static, Platinum];
 ```
 
 Dependencies between assertion levels
@@ -178,16 +181,16 @@ Specific assertions code can be activated / deactivated through an extension of
 the Assertion_Policy pragma:
 
 ```Ada
-pragma Assertion_Policy (Gold => Check, Platinium => Ignore);
+pragma Assertion_Policy (Gold => Check, Platinum => Ignore);
 ```
 
 Compiler options may also have an impact on the default policies.
 
 Note that activating or deactivating assertion levels have an impact on dependent
-ghost scopes as follows:
+assertion levels as follows:
 - Deactivating one assertion level will deactivate all assertion levels that are
   allowed to depend on it.
-- Activating one assertion level will activate all ghost scopes that it depends
+- Activating one assertion level will activate all assertion levels that it depends
   on.
 
 Reference-level explanation
@@ -252,4 +255,3 @@ Or through a different example:
 This could help model various execution modes in a high integrity application,
 allowing to implement degraded safety mode when needed. Knowning wether this
 kind of advanced capabilty is valuable would require some industrial feedback.
-
