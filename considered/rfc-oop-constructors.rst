@@ -218,7 +218,7 @@ in the constuctor body, For example:
    procedure Constr (Self : in out Child);
 
    procedure Constr (Self : in out Child)
-      with Super (42)
+      with Super => (42)
    is
    begin
       null;
@@ -237,7 +237,7 @@ Note that the constructor of an abstract type can be called here, for example:
 
    procedure Constr (Self : in out Child)
       -- Root'Make can be called here to initialize Super
-      with Super (42)
+      with Super => (42)
    is
    begin
       null;
@@ -281,7 +281,7 @@ Here's an example of using ``Initialize`` for such a case:
    procedure Constr (Self : in out C; V : Integer);
 
    procedure Constr (Self : in out C; V : Integer)
-      with Initialize (F => Some_Type'Make (V))
+      with Initialize => (F => Some_Type'Make (V))
    is
    begin
       null;
@@ -328,7 +328,7 @@ initialized as described at declaration time. For example:
    end Constr;
 
    procedure Constr (Self : in out C; S : String)
-      with Initialize (A => Print_And_Return (S))
+      with Initialize => (A => Print_And_Return (S))
    is
    begin
       null;
@@ -360,7 +360,7 @@ others, it is possible to initialize limited types:
    procedure Constr (Self : in out C);
 
    procedure Constr (Self : in out C)
-      with Initialize (F => (1, 2))
+      with Initialize => (F => (1, 2))
    is
    begin
       null;
@@ -382,7 +382,7 @@ object. The following for example will issue an error:
    procedure Constr (Self : in out Child);
 
    procedure Constr (Self : in out Child)
-      with Initialize (
+      with Initialize => (
          A => 1, -- Compilation Error
          B => 2, -- Compilation Error
          C => 3  -- OK
@@ -403,7 +403,7 @@ is illegal:
    end record with Constructor => Constr;
 
    procedure Constr (Self : in out Root)
-      with Initialize (
+      with Initialize => (
          A => 1, -- OK
          B => Self.A -- Compilation Error
       )
@@ -448,7 +448,7 @@ initialization list. For example:
       procedure Constr (Self : in out T2; Size : Integer);
 
       procedure Constr (Self : in out T2; Size : Integer)
-         with Initialize (L => Size - 1)
+         with Initialize => (L => Size - 1)
       is
       begin
          null;
@@ -501,14 +501,14 @@ with the new notation:
   package body P is
 
    procedure Constr (Self : in out New_Root; L : Integer)
-      with Initializes (L_Root => L)
+      with Initialize => (L_Root => L)
    is
    begin
       null;
    end;
 
    procedure Constr (Self : in out New_Child; L1, L2 : Integer)
-      with Super (L1), Initializes (L_Child_2 => L2)
+      with Super => (L1), Initialize => (L_Child_2 => L2)
    is
    begin
       null;
@@ -546,7 +546,7 @@ cannot however be used to create a value. For exmample:
    end record with Constructor => Constr;
 
    procedure Constr (Self : in out Bla; Val : Boolean)
-      with Initialize (V => Val);
+      with Initialize => (V => Val);
    is
       null;
    end Constr;
@@ -731,6 +731,17 @@ while it is possible to extend a "regular" tagged type by a "by constructor"
 tagged type, it is not possible to extend a "by constructor" tagged type by
 a regular one.
 
+Initialization
+--------------
+
+In certain situations, it's important to know if an object is considered
+initialized. For example, this can clarify wether passing a value of such object
+may lead to errors.
+
+An object value in a constructor is consisered initialized once the `Super` and
+`Initialze` aspects have been computed. Formally, the role of the constructor
+is to establish further properties than the initialization.
+
 Reference-level explanation
 ===========================
 
@@ -786,15 +797,15 @@ copies:
 
    package body Test is
       procedure Constr (Self : in out T; S : Integer)
-         with Initializes (S => S * 2);
+         with Initialize => (S => S * 2);
       is
       begin
          Self.Content := (others => 12);
       end Constr;
 
       procedure Constr (Self : in out U)
-         with Initializes (S2 => 12)
-              Super (S => 15)
+         with Initialize => (S2 => 12)
+              Super => (S => 15)
       is
       begin
          Self.Content2 := (others => 18);
@@ -862,6 +873,7 @@ copies:
 
    end Test;
 
+
 Drawbacks
 =========
 
@@ -892,7 +904,7 @@ generics. We could consider allowing:
       procedure Constr (Val : String);
 
       procedure Constr (Val : String)
-         with Initialize (X => Val);
+         with Initialize => (X => Val);
       begin
          null;
       end Constr;
@@ -918,7 +930,7 @@ Consider the following hierarchy:
    end record with Constructor => Constr;
 
    procedure Constr (Self : in out Bla; C : Boolean)
-      with Initialize (D => C);
+      with Initialize => (D => C);
    is
       null;
    end Constr;
@@ -926,7 +938,7 @@ Consider the following hierarchy:
    type Child is new Root with null record with Constructor => Constr;
 
    procedure Constr (Self : in out Bla; C : Boolean)
-      with Super (C);
+      with Super => (C);
    is
       null;
    end Constr;
