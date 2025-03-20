@@ -648,7 +648,7 @@ an in out reference to the type as first parameter:
 
    generic
       type T is tagged record with Constructor => Constr;
-      with procedure Constr (V : Integer) return T;
+      with procedure Constr (V : Integer);
    package G is
       V : T := T'Make (55);
    end G;
