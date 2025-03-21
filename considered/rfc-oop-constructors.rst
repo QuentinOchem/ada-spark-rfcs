@@ -26,54 +26,16 @@ For example:
 
    package P is
       type T1 is tagged null record;
-      for T1' with Constructor => Constr;
 
-      procedure Constr (Self : in out T1);
-      procedure Constr (Self : in out T1; Some_Value : Integer);
+      procedure T1'Constructor (Self : in out T1);
+      procedure T1'Constructor (Self : in out T1; Some_Value : Integer);
 
       type T2 is null record;
-      for T2'Constructor use Constr;
 
-      procedure Constr (Self : in out T2; Some_Value : Integer);
+      procedure T2'Constructor (Self : in out T2; Some_Value : Integer);
    end P;
 
-Note that as for all attributes, the Ada 2012 syntax is available (and used in
-the rest of that document):
-
-.. code-block:: ada
-
-   package P is
-      type T1 is tagged null record
-      with Constructor => Constr;
-
-      procedure Constr (Self : in out T1);
-      procedure Constr (Self : in out T1; Some_Value : Integer);
-
-   end P;
-
-Once a constructor name is chosen with the "Constructor" aspect, all primitives
-declared for this type with the constructor name are considered constructor, it
-is an error to declare a primitive of that type for that name that doesn't
-match the expected profile. Constructors cannot be called directly, it is an
-error to refer to that constructor through a call or aspect.
-
-Every type can decide on different constructor names, children can have
-different names than parent (coding style may impose nomenclatura here). For
-example:
-
-.. code-block:: ada
-
-   package P is
-      type Root is tagged null record
-      with Constructor => Root_Constr;
-
-      procedure Root_Constr (Self : in out T1);
-      procedure Root_Constr (Self : in out T1; Some_Value : Integer);
-
-      type Child is new Root with null record with Constructor => Child_Constr;
-
-      procedure Child_Constr (Self : in out T2; Some_Value : Integer);
-   end P;
+Note that this is using exclusively the newly introduced syntax for attributes.
 
 As soon as a constructor exist, an objects cannot be created without calling one
 of the available constructors, omitting the self parameter. This call is made on
@@ -86,7 +48,7 @@ object on the heap. E.g:
    V : T1; -- OK, parameterless constructor
    V2 : T1 := T1'Make(42); -- OK, 1 parameter constructor
 
-   type T1_Ref is acecss all T1'Class;
+   type T1_Ref is access all T1'Class;
 
    V3 : T1_Ref := new T1;
    V4 : T1_Ref := new T1'Make(42);
@@ -171,9 +133,9 @@ initialized from a copy. For example:
 .. code-block:: ada
 
    package P is
-      type T1 is tagged null record with Constructor => Constr;
+      type T1 is tagged null record;
 
-      procedure Constr (Self : in out T1; Source : T1);
+      procedure T1'Constructor (Self : in out T1; Source : T1);
 
 If not specified, a default copy constructor is automatically generated.
 The implicit copy constructor will call the parent copy constructor, then copy
@@ -211,37 +173,37 @@ in the constuctor body, For example:
 
 .. code-block:: ada
 
-   type Root is tagged null record with Constructor => Constr;
-   procedure Constr (Self : in out Root; V : Integer);
+   type Root is tagged null record;
+   procedure Root'Constructor (Self : in out Root; V : Integer);
 
-   type Child is new Root with null record with Constructor => Constr;
-   procedure Constr (Self : in out Child);
+   type Child is new Root with null record;
+   procedure Child'Constructor (Self : in out Child);
 
-   procedure Constr (Self : in out Child)
+   procedure Child'Constructor (Self : in out Child)
       with Super => (42)
    is
    begin
       null;
-   end Constr;
+   end Child'Constructor;
 
 Note that the constructor of an abstract type can be called here, for example:
 
 .. code-block:: ada
 
-   type Root is abstract tagged null record with Constructor => Constr;
-   procedure Constr (Self : in out Root; V : Integer);
+   type Root is abstract tagged null record;
+   procedure Root'Constructor (Self : in out Root; V : Integer);
 
-   type Child is new Root with null record with Constructor => Constr;
-   procedure Constr (Self : in out Child);
+   type Child is new Root with null record;
+   procedure Child'Constructor (Self : in out Child);
 
 
-   procedure Constr (Self : in out Child)
+   procedure Child'Constructor (Self : in out Child)
       -- Root'Make can be called here to initialize Super
       with Super => (42)
    is
    begin
       null;
-   end Constr;
+   end Child'Constructor;
 
 When valuating values in the Super aspect, the constructed object does not
 exit yet. It is illegal to refer to this parameter in the aspect.
@@ -271,21 +233,21 @@ Here's an example of using ``Initialize`` for such a case:
 
 .. code-block:: ada
 
-   type Some_Type is tagged null record with Constructor => Constr;
-   procedure Constr (Self : in out C; Some_Value : Integer);
+   type Some_Type is tagged null record;
+   procedure Some_Type'Constructor (Self : in out C; Some_Value : Integer);
 
    type C is tagged record
       F : Some_Type;
-   end record with Constructor => Constr;
+   end record;
 
-   procedure Constr (Self : in out C; V : Integer);
+   procedure C'Constructor (Self : in out C; V : Integer);
 
-   procedure Constr (Self : in out C; V : Integer)
+   procedure C'Constructor (Self : in out C; V : Integer)
       with Initialize => (F => Some_Type'Make (V))
    is
    begin
       null;
-   end Constr;
+   end C'Constructor;
 
 
 Note that if there is no initialization for components with no default
@@ -293,8 +255,8 @@ constructors, the compiler will raise an error:
 
 .. code-block:: ada
 
-   type Some_Type is tagged null record with Constructor => Constr;
-   procedure Constr (Self : in out C; Some_Value : Integer);
+   type Some_Type is tagged null record;
+   procedure Some_Type'Constructor (Self : in out C; Some_Value : Integer);
 
    type C is tagged record
       F : Some_Type; -- Compilation error, F needs explicit constructor call
@@ -316,23 +278,23 @@ initialized as described at declaration time. For example:
    type C is tagged record
       A : Integer := Print_And_Return ("A FROM RECORD");
       B : Integer := Print_And_Return ("B FROM RECORD");
-   end record with Constructor => Constr;
+   end record;
 
-   procedure Constr (Self : in out C);
-   procedure Constr (Self : in out C; S : String);
+   procedure C'Constructor (Self : in out C);
+   procedure C'Constructor (Self : in out C; S : String);
 
-   procedure Constr (Self : in out C)
+   procedure C'Constructor (Self : in out C)
    is
    begin
       null;
-   end Constr;
+   end C'Constructor;
 
-   procedure Constr (Self : in out C; S : String)
+   procedure C'Constructor (Self : in out C; S : String)
       with Initialize => (A => Print_And_Return (S))
    is
    begin
       null;
-   end Constr;
+   end C'Constructor;
 
    V1 : C := C'Make; -- Will print A FROM RECORD, B FROM RECORD
    V2 : C := C'Make ("ATERNATE A"); -- Will print ATERNATE A, B FROM RECORD
@@ -355,16 +317,16 @@ others, it is possible to initialize limited types:
 
    type C is limited tagged record
       F : R;
-   end record with Constructor => Constr;
+   end record;
 
-   procedure Constr (Self : in out C);
+   procedure C'Constructor (Self : in out C);
 
-   procedure Constr (Self : in out C)
+   procedure C'Constructor (Self : in out C)
       with Initialize => (F => (1, 2))
    is
    begin
       null;
-   end Constr;
+   end C'Constructor;
 
 The only components that a constructor can initialize in the initialization list
 are its own. Parent components are supposed to be initialized by the parent
@@ -378,10 +340,11 @@ object. The following for example will issue an error:
 
    type Child is new Root with record
       C : R;
-   end record with Constructor => Constr;
-   procedure Constr (Self : in out Child);
+   end record;
 
-   procedure Constr (Self : in out Child)
+   procedure Child'Constructor (Self : in out Child);
+
+   procedure Child'Constructor (Self : in out Child)
       with Initialize => (
          A => 1, -- Compilation Error
          B => 2, -- Compilation Error
@@ -390,7 +353,7 @@ object. The following for example will issue an error:
    is
    begin
       null;
-   end Constr;
+   end Child'Constructor;
 
 When valuating values in the Initialize aspect, the constructed object does not
 exit yet. It is illegal to refer to this parameter in the aspect. The following
@@ -400,9 +363,9 @@ is illegal:
 
    type Root is record
       A, B : Integer;
-   end record with Constructor => Constr;
+   end record;
 
-   procedure Constr (Self : in out Root)
+   procedure Root'Constructor (Self : in out Root)
       with Initialize => (
          A => 1, -- OK
          B => Self.A -- Compilation Error
@@ -410,7 +373,7 @@ is illegal:
    is
    begin
       null;
-   end Constr;
+   end Root'Constructor;
 
 
 Valuation of Discriminants
@@ -429,8 +392,9 @@ of legal and illegal code:
 
       type T2 (L : Integer) is tagged record
          X : Some_Array (0 .. L);
-      end record with Constructor => Constr;
-      procedure Constr (Self : in out T2);
+      end record;
+
+      procedure T2'Constructor (Self : in out T2);
 
       V1 : T1 (10); -- legal
       V2 : T2 (10); -- compilation error
@@ -444,15 +408,16 @@ initialization list. For example:
    package P is
       type T2 (L : Integer) is tagged record
          X : Some_Array (0 .. L);
-      end record with Constructor => Constr;
-      procedure Constr (Self : in out T2; Size : Integer);
+      end record;
 
-      procedure Constr (Self : in out T2; Size : Integer)
+      procedure T2'Constructor (Self : in out T2; Size : Integer);
+
+      procedure T2'Constructor (Self : in out T2; Size : Integer)
          with Initialize => (L => Size - 1)
       is
       begin
          null;
-      end Constr;
+      end T2'Constructor;
 
       V2 : T2 := T2'Make (10);
    end P;
@@ -463,12 +428,14 @@ constructors, the parent type discriminants are not set. For example:
 
 .. code-block:: ada
 
-   type Root (V : Integer) is tagged null record with Constructor => Constr;
-   procedure Constr (Self : in out Child);
+   type Root (V : Integer) is tagged null record;
+
+   procedure Root'Constructor (Self : in out Child);
 
    -- note that we're not specifying Root discriminant as Root has a constructor
-   type Child is new Root with null record with Constructor => Constr;
-   procedure Constr (Self : in out Child);
+   type Child is new Root with null record;
+
+   procedure Child'Constructor (Self : in out Child);
 
 Here's a full example demonstrating both a regular use of discriminant and a use
 with the new notation:
@@ -487,32 +454,33 @@ with the new notation:
 
       type New_Root (L_Root : Integer) is tagged record
          V : String (1 .. L_Root);
-      end record with Constructor => Constr;
+      end record;
 
-      procedure Constr (Self : in out New_Root; L : Integer);
+      procedure New_Root'Constructor (Self : in out New_Root; L : Integer);
 
       type New_Child (L_Child_2 : Integer) is new New_Root with record
          W : String (1 .. L_Child_2);
-      end record with Constructor => Constr;
-      procedure Constr (Self : in out New_Child; L1, L2 : Integer);
+      end record;
+
+      procedure New_Child'Constructor (Self : in out New_Child; L1, L2 : Integer);
 
   end P;
 
   package body P is
 
-   procedure Constr (Self : in out New_Root; L : Integer)
+   procedure New_Root'Constructor (Self : in out New_Root; L : Integer)
       with Initialize => (L_Root => L)
    is
    begin
       null;
-   end;
+   end New_Root'Constructor;
 
-   procedure Constr (Self : in out New_Child; L1, L2 : Integer)
+   procedure New_Child'Constructor (Self : in out New_Child; L1, L2 : Integer)
       with Super => (L1), Initialize => (L_Child_2 => L2)
    is
    begin
       null;
-   end;
+   end New_Child'Constructor;
 
  end P;
 
@@ -543,13 +511,13 @@ cannot however be used to create a value. For exmample:
          when False =>
             B, C : Integer;
       end case;
-   end record with Constructor => Constr;
+   end record;
 
-   procedure Constr (Self : in out Bla; Val : Boolean)
+   procedure Bla'Constructor (Self : in out Bla; Val : Boolean)
       with Initialize => (V => Val);
    is
       null;
-   end Constr;
+   end Bla'Constructor;
 
    V1 : Bla := V'Make (True); -- OK, that's what we want
    V2 : Bla (True); -- NOK, this needs an explicit discriminant check
@@ -597,14 +565,16 @@ constructors are provided. For example:
 .. code-block:: ada
 
    type T1 is tagged record
-
+      null;
    end record;
 
-   type T2 is tagged null record with Constructor => Constr;
-   procedure Constr (Self : in out T1, X : Integer);
+   type T2 is tagged null record;
 
-   type T3 is new T2 with null record with Constructor => Constr;
-   procedure Constr (Self : in out T1, X : Integer, Y : Integer);
+   procedure T2'Constructor (Self : in out T1, X : Integer);
+
+   type T3 is new T2 with null record;
+
+   procedure T3'Constructor (Self : in out T1, X : Integer, Y : Integer);
 
    V1 : T1;        -- OK
    V2a : T2;       -- Compilation error, no parameterless constructor is present
@@ -700,11 +670,12 @@ private section of the package:
 .. code-block:: ada
 
    package P is
-      type T1 is null record with Constructor => Constr;
-      procedure Constr (Self : in out T1) is abstract;
+      type T1 is null record;
+
+      procedure T1'Constructor (Self : in out T1) is abstract;
 
    private
-      procedure Constr (Self : in out T1);
+      procedure T1'Constructor (Self : in out T1);
    end P;
 
 Tagged Hierarchy Consistency
@@ -722,9 +693,9 @@ type by a "by constructor" tagged type, e.g.:
 
    type New_Child is new New_Root with record
       null;
-   end record with Constructor => Constr;
+   end record;
 
-   procedure Constr (Self : in out New_Child; L1, L2 : Integer);
+   procedure New_Child'Constructor (Self : in out New_Child; L1, L2 : Integer);
 
 In that case, any child of New_Child has to be a by-constructor type, ie it
 while it is possible to extend a "regular" tagged type by a "by constructor"
@@ -783,33 +754,33 @@ copies:
 
       type T (S : Integer) is tagged record
          Content : Pos_Array (1..S);
-      end record with Constructor => Constr;
+      end record;
 
-      procedure Constr (Self : in out T; S : Integer);
+      procedure T'Constructor (Self : in out T; S : Integer);
 
       type U (S2 : Integer) is new T with record
          Content_2 : Pos_Array (1..S2);
-      end record with Constructor => Constr;
+      end record;
 
-      procedure Constr (Self : in out T);
+      procedure U'Constructor (Self : in out T);
 
    end Test;
 
    package body Test is
-      procedure Constr (Self : in out T; S : Integer)
+      procedure T'Constructor (Self : in out T; S : Integer)
          with Initialize => (S => S * 2);
       is
       begin
          Self.Content := (others => 12);
-      end Constr;
+      end T'Constructor;
 
-      procedure Constr (Self : in out U)
+      procedure U'Constructor (Self : in out U)
          with Initialize => (S2 => 12)
               Super => (S => 15)
       is
       begin
          Self.Content2 := (others => 18);
-      end Constr;
+      end U'Constructor;
 
    end Test;
 
@@ -900,10 +871,11 @@ generics. We could consider allowing:
    package P is
       type T1 (<>) is tagged record -- T1 is indefinite
 	      X : String;
-      end record with Constructor => Constr;
-      procedure Constr (Val : String);
+      end record;
 
-      procedure Constr (Val : String)
+      procedure T1'Constructor (Self : T1; Val : String)
+
+      procedure T1'Constructor (Self : T1; Val : String)
          with Initialize => (X => Val);
       begin
          null;
@@ -927,21 +899,21 @@ Consider the following hierarchy:
          when False =>
             B : Integer;
       end case;
-   end record with Constructor => Constr;
+   end record;
 
-   procedure Constr (Self : in out Bla; C : Boolean)
+   procedure Root'Constructor (Self : in out Bla; C : Boolean)
       with Initialize => (D => C);
    is
       null;
-   end Constr;
+   end Root'Constructor;
 
    type Child is new Root with null record with Constructor => Constr;
 
-   procedure Constr (Self : in out Bla; C : Boolean)
+   procedure Child'Constructor (Self : in out Bla; C : Boolean)
       with Super => (C);
    is
       null;
-   end Constr;
+   end Child'Constructor;
 
 Child does not have any discrimininant. Root discriminant is set by its own
 constructor. There is currently no syntax allowing to subtype Child and provide
