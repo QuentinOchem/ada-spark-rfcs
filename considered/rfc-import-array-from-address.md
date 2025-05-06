@@ -63,7 +63,7 @@ example:
 ```
 
 Attribute parameters are named either First, Last (for the one dimension case)
-or First_<n>, First_<n> (for the n dimensions case).
+or First_n, Last_n (for the n dimensions case).
 
 Reference-level explanation
 ===========================
