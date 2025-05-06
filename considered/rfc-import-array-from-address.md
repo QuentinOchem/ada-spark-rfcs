@@ -62,6 +62,9 @@ example:
       (Create_C_Array_Of_Int (10), 10);
 ```
 
+Attribute parameters are named either First, Last (for the one dimension case)
+or First_<n>, First_<n> (for the n dimensions case).
+
 Reference-level explanation
 ===========================
 
