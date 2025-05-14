@@ -585,78 +585,81 @@ constructors are provided. For example:
 Constructors and Generics
 -------------------------
 
-A type used an as a actual of a formal generic parameter is expected to have
-a parameterless constructor. This is necessary to enable proper derivation and
-allocation. For example:
+Generic formal constructor follow similar syntax and rules as when actual
+constructors are declared. Notably:
+- A tagged type, when not provided with any specific indication, is expected
+  to have a parameterless and a copy constructor.
+- When an explicit (non-copy) constructor is added to the list of generic formal
+  constructors, no parameterless constructor is required by the generic formal.
+- Requirement on parameterless and by copy constructors can be removed by
+  marking them abstract.
+
+As for subsprograms, generic formal constructors are introduced with the `with`
+reserved word. For example:
 
 .. code-block:: ada
 
    generic
-      type T is tagged record;
+      type T1 is tagged private;
+      --  Needs at least a parameterless and a by-copy constructor
+
+      type T2 is tagged private;
+      with T2'Constructor (Self : in out T2; V : Integer);
+      --  No parameterless constructor expected, but a by-copy one
+
+      type T3 is tagged private;
+      with T2'Constructor (Self : in out T2) is abstract;
+      --  No parameterless constructor expected, but a by-copy one
+
+      type T4 is tagged private;
+      with T4'Constructor (Self : in out T2) is abstract;
+      with T4'Constructor (Self : in out T2; Src : T2) is abstract;
+      --  No parameterless constructor expected, but a by-copy one
    package G is
-      V : T;
+      V : T1; -- OK, we have parameterless constructor
+      V2 : T1 := V; -- OK, we have by-copy constructor
+
+      V3 : T4; -- NOK we don't have parameterless constructor for T4
    end G;
 
    package P is
 
-      type T1 is tagged null record;
-      procedure T1 (Self : in out T1);
+      type R1 is tagged null record;
+      procedure R1'Constructor (Self : in out R1);
+      procedure R1'Constructor (Self : in out R1; V : Integer);
 
-      type T2 is tagged null record;
-      procedure T2 (Self : in out T1; V : Integer);
+      type R2 is tagged null record;
+      procedure R2'Constructor (Self : in out R2; V : Integer);
+      procedure R2'Constructor (Self : in out R2; Src : R2) is abstract;
 
-      package G1 is new G (T1); -- Legal
-      package G2 is new G (T2); -- Illegal, T2 doesn't have a parameterless constructor
+      package G1 is new G (
+         T1 => R1,
+         T2 => R1,
+         T3 => R1,
+         T4 => R1
+      );
+      --  All of these are OK, T1 provides all the necessary constructors
+
+      package G2 is new G (
+         T1 => R2, -- Error, R2 doesn't have parametelress and by copy constructor
+         T2 => R2, -- Error, R2 doesn't have parametric and by copy constructor
+         T3 => R2, -- Error, R2 doesn't by copy constructor
+         T4 => R2 -- OK, no constructor expected here
+      );
 
    end P;
 
-The syntax to provide a constructor on a tagged type is similar to a scopeless
-constructor - it's a formal procedure of the name of the type, that takes
-an in out reference to the type as first parameter:
+Note that the notation:
 
 .. code-block:: ada
 
    generic
-      type T is tagged record with Constructor => Constr;
-      with procedure Constr (V : Integer);
-   package G is
-      V : T := T'Make (55);
-   end G;
+      type T1 is tagged private;
 
-   package P is
+Accept both by-constructors and non-by constructor types.
 
-      type T2 is tagged null record with Constructor => Constr;
-      procedure Constr (Self : in out T1; V : Integer);
-
-      package G2 is new G (T2, T2'Make); -- Legal
-
-   end P;
-
-Types without parameterless constructors must either have explicit constructors
-declared, or be declared as indefinite type (ie they can't be instanciated in
-by the generic).
-
-.. code-block:: ada
-
-   generic
-      type T (<>) is tagged record;
-   package G is
-      procedure Proc (V : T)
-   end G;
-
-   package P is
-
-      type T1 is tagged null record with Constructor => Constr;
-      procedure Constr (Self : in out T1);
-
-      type T2 is tagged null record with Constructor => Constr;
-      procedure Constr (Self : in out T1; V : Integer);
-
-      package G1 is new G (T1); -- Legal
-      package G2 is new G (T2); -- Legal
-
-   end P;
-
+--  ??? How to derive with non-constructor types and still be consistent with
+--  the tagged type consistency?
 
 Removing Constructors from Public View
 --------------------------------------
