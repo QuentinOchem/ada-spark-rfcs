@@ -543,7 +543,7 @@ may not exist for its child.
 
 By default, a class provide a parameterless constructor, on top of the copy
 constructor. This parameterless constructor is removed as soon as explicit
-constructors are provided (outside of the by copy constructor). For example:
+constructors are provided. For example:
 
 .. code-block:: ada
 
@@ -565,9 +565,6 @@ constructors are provided (outside of the by copy constructor). For example:
    V3 : T3 := T3'Make(5);    -- Compilation error, no more constructor with 1 parameter for T3
    V3 : T3 := T3'Make(5, 6); -- OK
 
-The introduction of a by-copy constructor is the only case that does not remove
-the parameterless default constructor.
-
 Constructors and Generics
 -------------------------
 
@@ -575,7 +572,7 @@ Generic formal constructor follow similar syntax and rules as when actual
 constructors are declared. Notably:
 - A tagged type, when not provided with any specific indication, is expected
   to have a parameterless and a copy constructor.
-- When an explicit (non-copy) constructor is added to the list of generic formal
+- When an explicit constructor is added to the list of generic formal
   constructors, no parameterless constructor is required by the generic formal.
 - Requirement on parameterless and by copy constructors can be removed by
   marking them abstract.
