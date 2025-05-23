@@ -22,8 +22,7 @@ can be declared:
 - the package private view
 
 A public view that allows for additional fields to be declared is denoted by
-`with private` after its declaration. The private view of a record type can
-then be split between its own public and private sections:
+`with private` after its declaration.
 
 For example:
 
