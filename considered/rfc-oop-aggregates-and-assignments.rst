@@ -18,7 +18,9 @@ current semantics.
 
 First, in Ada, aggregates are a way to completely workaround calls of
 initialization. To some respect, this makes sense, aggregates are ways to
-replace initialization.
+replace initialization. But the consequence is that there's no way to ensure
+that a given sequence of statement is putting an object in a consistent state
+at creation time (unlike traditional constructors).
 
 Second Adjust perform a post-copy update to a type. This causes a double issue,
 first in terms of performance, as assignment may not need all components to be
@@ -36,21 +38,23 @@ is copied into a child one with specific values provided by the aggregate,
 again here with no control over the consistency of values (not even in Adjust
 in the case of initialiation).
 
-To solve these issues, we'll need to introduce a two step object update
+To solve these issues, we propose to introduce a two step object update
 mechanism through a value duplication ('Clone) and post update adjustment
 ('Adjust).
 
 Note that this extra complexity is driven from the desire to support natively
 Ada constructions (aggregates, partial copie, etc) and improve compatibility
-between classes and tagged types. Users can leverage implicit implementation if
-such level of control is unecessary, or remove them from the type profile if
-the functionalities that they enable are not useful.
+between classes and tagged types. Users can leverage default implementation if
+such level of control is unecessary. Some language extension may also allow
+to forbig aggregates and partial update on specific types (although this
+introduces complexities in generics that now need to specify wether these
+restricted types are allowed or not).
 
 Also keep in mind that Ada Flare aggregates also need to account for types that
 have both public and private components.
 
-This RFC is about tagged record and later class records even if not explicitely
-mentionned. Simple records should also be studied when constructors are made
+This RFC is about tagged record (and class records even if not explicitely
+mentionned). Simple records should also be studied when constructors are made
 available to them.
 
 The additional capabilities need to be optimized as much as possible by the
@@ -61,9 +65,8 @@ it knows there's no chance of calling an overriden subprogram.
 'Clone
 ------
 
-The attribute 'Clone can be defined for each tagged types. It describes how to
-copy (or clone) the values of a tagged type into an aggregate instance. For
-example:
+The attribute 'Clone can be defined for each tagged type. It describes how to
+copy (or clone) the value of a tagged type into a other one. For example:
 
 .. code-block:: ada
 
@@ -71,7 +74,7 @@ example:
       A : access Integer;
    end record;
 
-   procedure Root'Clone (Self : Root; To : in out Root'Aggregate);
+   procedure Root'Clone (Self : Root; To : in out Root);
 
 Root'Clone is not a primitive and cannot be inherited. However, a child
 class may provide its own cloning method:
@@ -82,7 +85,7 @@ class may provide its own cloning method:
       B : access Integer;
    end record;
 
-   procedure Child'Clone (Self : Child; To : in out Child'Aggregate);
+   procedure Child'Clone (Self : Child; To : in out Child);
 
 The default implementation of Clone first calls the parent clone and then
 calls clone operation of all the components one by one. The compiler is free to
@@ -103,10 +106,10 @@ parts may still be inconsistent and fixed later by Adjust.
 'Adjust is a overridable attribute called after certain operations. It is
 different from the legacy Ada Adjust primitive in that it has an argument
 refering to the initial value. Note that the From parameter of adjust is
-always typed after the root type of the tagged record hierarchy. The actual
-parameter may be any aggregate type in the hierarchy (supporting in particular
-partial assignments). Note that the From value is provided for reference but is
-not expected to be modified.
+always typed after the root type of the tagged record hierarchy - indeed, the source
+object may be higher up in the derivation chain in the case of partial
+copy. This value value is provided for reference but is not expected to be
+modified.
 
 .. code-block:: ada
 
@@ -114,16 +117,16 @@ not expected to be modified.
       A : access Integer;
    end record;
 
-   procedure Root'Adjust (Self : in out Root; From : Root'Aggregate);
+   procedure Root'Adjust (Self : in out Root; From : Root);
 
    type Child is new Root with record
       B : access Integer;
    end record;
 
-   procedure Child'Adjust (Self : in out Child; From : Root'Aggregate);
+   procedure Child'Adjust (Self : in out Child; From : Root);
 
-Conceptually, values of the From parameter will have been copied prior to
-calling adjust.
+Values of the From parameter will have been copied from Clone call prior to
+calling Adjust.
 
 Invariants are checked after a call to Adjust.
 
@@ -146,15 +149,13 @@ needs to be maintained equal to the parents.
       Self.A := new Integer'(0);
    end Root'Constructor;
 
-   procedure Root'Clone (Self : Root; To : in out Root'Aggregate) is
+   procedure Root'Clone (Self : Root; To : in out Root) is
    begin
-      if not Self'Overlaps_Storage (To) then
-         Free (To.A);
-         To.A := new Integer'(Self.A.all);
-      end if;
+      Free (To.A);
+      To.A := new Integer'(Self.A.all);
    end Root'Clone;
 
-   procedure Root'Adjust (Self : in out Root; From : Root'Aggregate) is
+   procedure Root'Adjust (Self : in out Root; From : Root) is
    begin
       null;
    end Root'Adjust;
@@ -168,16 +169,16 @@ needs to be maintained equal to the parents.
       Self.A := new Integer'(0);
    end Child'Constructor;
 
-   procedure Child'Clone (Self : Child; To : in out Child'Aggregate) is
+   procedure Child'Clone (Self : Child; To : in out Child) is
    begin'
       Root (To) := Root (Self);
       Free (To.B);
       To.B := new Integer'(Self.B.all);
    end Child'Clone;
 
-   procedure Child'Adjust (Self : in out Child; From : Root'Aggregate) is
+   procedure Child'Adjust (Self : in out Child; From : Root) is
    begin
-      if From not in Child'Aggregate'Class then
+      if From not in Child'Class then
          --  This was a partial assignment, fix the A / B consistency
          Self.B.all := Self.A.all;
       end if;
@@ -206,8 +207,8 @@ and adjust:
    begin
 
       R2 := R1;
-      --  Root'Clone (R1, R2);
-      --  Root'Adjust (R2, R1);
+      --  Root'Clone (R1, R2); -- Static call
+      --  Root'Adjust (R2, R1); -- Dispatching call on R2
 
 Partial Copy Assignments
 ------------------------
@@ -227,7 +228,7 @@ views are definite, the assignment is partial. For example:
       --  Root'Clone (R1, C1);
       --  Child'Adjust (C1, R1);
 
-Note that in this case, the sequence is exactly the same as before. A similar
+In this case, the sequence is exactly the same as before. A similar
 thing can be observed in parameters:
 
 .. code-block:: ada
@@ -246,8 +247,8 @@ thing can be observed in parameters:
 
       Something (C1, R1);
 
-Note that in this version of Ada, calls to primitive always dispatch. So
-the call to Root'Adjust does dispatch to Child'Adjust.
+In this version of Ada, calls to primitive always dispatch. So the call to
+Root'Adjust does dispatch to Child'Adjust.
 
 Note also that while Adjust dispatches, Clone is a static call, in order to
 respect the user choice to assign only the components of the view. For example:
@@ -262,9 +263,6 @@ respect the user choice to assign only the components of the view. For example:
       Root (C1) := Root (C2);
       --  Root'Clone (C2, C1); -- this is static, only copy Root fields
       --  Root'Adjust (C1, C2); -- this dispatches
-
-The user can still express the desire to copy an entire object through a 'Class
-view, which will then lead to a tag check.
 
 Class-Wide Assignments
 ----------------------
@@ -301,7 +299,7 @@ temporary object initially:
 
       C := (new Integer, new Integer);
       -- Tmp : Child;
-      -- Child'Constructor (C);
+      -- Child'Constructor (Tmp);
       -- Tmp.A := new Integer;
       -- Tmp.B := new Integer;
       -- Child'Clone (Tmp, C);
@@ -322,7 +320,8 @@ B if it knows that there's no clone and adjust user attributes:
       -- C.B := new Integer;
 
 The above works the same in the case of a by extension aggregate if the parent
-type is directly referred to:
+type is directly referred to. Values taken from the parent object are those
+resulting of the constructor call:
 
 .. code-block:: ada
 
@@ -332,20 +331,19 @@ type is directly referred to:
 
       C := (Root with new Integer);
       -- Tmp : Child;
-      -- Child'Constructor (C);
+      -- Child'Constructor (Tmp);
       -- Tmp.B := new Integer;
       -- Child'Clone (Tmp, C);
       -- Child'Adjust (C, Tmp);
       -- Child'Destructor (Tmp);
 
-In these cases, the default values of the type will be taken if any.
-
 A few notes on the above sequences:
 
 - The call to Clone is important, as it allows to clean the target object if
   necessary prior to copy.
-- As we are cloning an object, we need to ensure its own internal consistency,
-  hence the need to call its constructor and destructor.
+- Before cloning Tmp we are cloning an object, we need to ensure its own
+  internal consistency and lifecycle, hence the need to call its constructor and
+  destructor.
 - Usage of aggregate in conjunction with types that provide constructors,
   destructor, adjust and clone attributes is somewhat heavy, as the aggregate
   needs to be fully initialized before cloned, then reclaimed. It's important
@@ -374,11 +372,6 @@ require an initial cloning of said value, e.g.:
       -- Child'Clone (Tmp, C);
       -- Child'Adjust (C, Tmp);
       -- Child'Destructor (Tmp);
-
-Note the two steps cloning sequence here - first the Root R is cloned, without
-code establishing consistency of the temporary object. Indeed, Tmp is a
-Child'Aggregate and has not been created through a constructor. Then Tmp.B is
-assigned. Tmp is then cloned to C.
 
 Delta Aggregates
 ----------------
@@ -415,14 +408,14 @@ constructor, e.g.:
 
       C := (A => new Integer, others => <>);
       -- Tmp : Child;
-      -- Child'Constructor (C);
+      -- Child'Constructor (Tmp);
       -- Tmp.A := new Integer;
       -- Child'Clone (Tmp, C);
       -- Child'Adjust (C, Tmp);
       -- Child'Destructor (Tmp);
 
 A new syntax in Flare allows types to have both public and private components,
-if a user does not have visibility over all the componentns of a type, he
+if a user does not have visibility over all the components of a type, he
 needs to specify in the aggregate that these non visible values are not
 specified with a "private" part at the end of the aggregate, e.g.:
 
@@ -542,7 +535,8 @@ This can be done through the Aggregate_Type aspect:
 
 This aspect must be positionned on the root of a tagged type hierarchy.
 It forbids the introduction of user defined constructors, destructor, clone and
-adjust attributes.
+adjust attributes in derivations. All record components of such types must
+also be Type_Aggregate types.
 
 Type_Aggregate types cannot be provided to generic tagged formal parameters, as
 the generic instance may extend the type and mistakenly add these attributes
