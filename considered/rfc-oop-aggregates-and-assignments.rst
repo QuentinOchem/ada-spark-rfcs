@@ -94,6 +94,9 @@ dynamcially resolved on 'Class wide type. This is arguably a departure from the
 but is required to allow partial copies of objects which are done today in
 various places Ada.
 
+The invariant of the target object is not checked after a call to Clone, some
+parts may still be inconsistent and fixed later by Adjust.
+
 'Adjust
 -------
 
@@ -121,6 +124,8 @@ not expected to be modified.
 
 Conceptually, values of the From parameter will have been copied prior to
 calling adjust.
+
+Invariants are checked after a call to Adjust.
 
 Base code for the Examples
 --------------------------
