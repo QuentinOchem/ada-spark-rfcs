@@ -570,6 +570,7 @@ Constructors and Generics
 
 Generic formal constructor follow similar syntax and rules as when actual
 constructors are declared. Notably:
+
 - A tagged type, when not provided with any specific indication, is expected
   to have a parameterless and a copy constructor.
 - When an explicit constructor is added to the list of generic formal
@@ -639,10 +640,9 @@ Note that the notation:
    generic
       type T1 is tagged private;
 
-Accept both by-constructors and non-by constructor types.
-
---  ??? How to derive with non-constructor types and still be consistent with
---  the tagged type consistency?
+Accept both by-constructors and non-by constructor types. However,
+by-constructor types would need to provide a parametelress constructor and a
+copy constructor to be accepted as formal parameters.
 
 Removing Constructors from Public View
 --------------------------------------
