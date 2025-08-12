@@ -166,7 +166,7 @@ needs to be maintained equal to the parents.
 
    procedure Child'Constructor (Self : in out Child) is
    begin
-      Self.A := new Integer'(0);
+      Self.B := new Integer'(0);
    end Child'Constructor;
 
    procedure Child'Clone (Self : Child; To : in out Child) is
@@ -531,17 +531,17 @@ This can be done through the Aggregate_Type aspect:
 
    type Root is tagged record
       A : access Integer;
-   end record with Type_Aggregate;
+   end record with Aggregate_Type;
 
 This aspect must be positionned on the root of a tagged type hierarchy.
 It forbids the introduction of user defined constructors, destructor, clone and
 adjust attributes in derivations. All record components of such types must
-also be Type_Aggregate types.
+also be Aggregate_Type types.
 
-Type_Aggregate types cannot be provided to generic tagged formal parameters, as
+Aggregate_Type types cannot be provided to generic tagged formal parameters, as
 the generic instance may extend the type and mistakenly add these attributes
 not knowing there are forbidden. However, a generic formal parameter may allow
-such types by adding the Type_Aggregate aspect in its definition:
+such types by adding the Aggregate_Type aspect in its definition:
 
 .. code-block:: ada
 
